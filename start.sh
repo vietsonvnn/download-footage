@@ -1,16 +1,26 @@
 #!/bin/bash
-# VidGrab — Double-click to start (macOS/Linux)
+# VidGrab v2.2 — Start Server (macOS / Linux)
 cd "$(dirname "$0")"
 
-# Check Python
-if ! command -v python3 &> /dev/null; then
-    echo "❌ Python3 not found. Install from https://python.org"
-    read -p "Press Enter to exit..."
-    exit 1
+# Auto-install if venv doesn't exist
+if [ ! -d "venv" ]; then
+    echo "  First run detected — running installer..."
+    bash install.sh
+    exit $?
 fi
 
-# Auto-install deps if missing
-python3 -c "import flask" 2>/dev/null || pip3 install flask yt-dlp
+source venv/bin/activate
 
-echo "🎬 Starting VidGrab..."
+# Quick dep check
+python3 -c "import flask, yt_dlp, requests" 2>/dev/null
+if [ $? -ne 0 ]; then
+    echo "  [FIX] Missing packages — installing..."
+    pip install --quiet flask yt-dlp requests browser_cookie3
+fi
+
+echo ""
+echo "  Starting VidGrab v2.2..."
+echo "  http://localhost:9123"
+echo "  Press Ctrl+C to stop"
+echo ""
 python3 server.py

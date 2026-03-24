@@ -1,69 +1,122 @@
-# VidGrab — Lightweight Video Downloader
+# VidGrab v2.2 — Video Downloader
 
-Giao diện đẹp, dễ dùng. Download video từ YouTube (và nhiều nguồn khác) về máy.
+Download video from YouTube, Envato Elements, Storyblocks, and 1000+ other sites.
 
-## Cài đặt (1 lần duy nhất)
+## Quick Start
 
-### Yêu cầu
-- **Python 3.8+** (đã có sẵn trên macOS, Windows cần cài từ python.org)
-- **ffmpeg** (để merge video + audio cho chất lượng cao)
-
-### Bước 1: Cài dependencies
+### macOS / Linux
 
 ```bash
-pip install flask yt-dlp
+# First time — install & run:
+bash install.sh
+
+# After that — just run:
+bash start.sh
 ```
 
-### Bước 2: Cài ffmpeg
+Or double-click `install.sh` (first time) / `start.sh` (after install).
 
-**macOS:**
-```bash
-brew install ffmpeg
+### Windows
+
+```
+# First time — install & run:
+Double-click install.bat
+
+# After that — just run:
+Double-click start.bat
 ```
 
-**Windows:**
-```bash
-winget install ffmpeg
-# hoặc tải từ https://ffmpeg.org/download.html
+App opens automatically at **http://localhost:9123**
+
+## Requirements
+
+| Dependency | Required | Auto-installed? |
+|-----------|----------|----------------|
+| Python 3.10+ | Yes | No — install from [python.org](https://python.org/downloads) |
+| ffmpeg | Yes | Yes (via Homebrew/winget) |
+| deno | Recommended | Yes (for YouTube JS challenges) |
+| flask, yt-dlp, requests | Yes | Yes (in venv) |
+
+## Features
+
+### Video Download
+- Paste 1 or many URLs (one per line)
+- Auto-detect URLs from messy text, auto-fix missing `https://`
+- Quality: 720p / 1080p / 1440p / 4K / MP3
+- Real-time progress with speed & ETA
+- `Ctrl/Cmd + Enter` to quick download
+
+### Premium Sites (Envato Elements & Storyblocks)
+- Import cookies via JSON (from Cookie-Editor browser extension)
+- Or auto-read cookies from Chrome/Firefox/Safari
+- Download individual videos or **bulk download by keyword search**
+
+**Bulk search download:**
+```
+# Paste a search URL — VidGrab auto-expands to all videos:
+https://www.storyblocks.com/all-video/search/B2-Spirit
+https://elements.envato.com/video/stock-video?q=ocean
 ```
 
-## Chạy app
+### Cookie Import (for Premium Sites)
+1. Install [Cookie-Editor](https://cookie-editor.com/) extension in Chrome/Firefox
+2. Go to `elements.envato.com` or `storyblocks.com` (logged in)
+3. Click Cookie-Editor icon > **Export** > Copy
+4. In VidGrab Settings > **Paste JSON** > Save
 
-```bash
-cd vidgrab
-python server.py
-```
+## Usage
 
-Trình duyệt sẽ tự mở tại `http://localhost:9123`
+| Action | How |
+|--------|-----|
+| Single download | Paste URL > Download |
+| Bulk download | Paste multiple URLs (one per line) > Download |
+| Search download | Paste search page URL > Download (auto-expands) |
+| Choose quality | Click 720p / 1080p / 1440p / 4K / MP3 chips |
+| Settings | Click gear icon (top right) |
+| Open folder | Click folder icon (top right) |
 
-## Sử dụng
-
-1. **Single download**: Paste 1 URL → nhấn Download (hoặc Ctrl/Cmd + Enter)
-2. **Bulk download**: Paste nhiều URL (mỗi dòng 1 URL) → nhấn Download
-3. **Chọn chất lượng**: Click chip 720p / 1080p / 1440p / 4K / MP3
-4. **Settings** (⚙️): Thay đổi thư mục lưu, template tên file, số download đồng thời
-5. **Mở thư mục** (📂): Mở folder chứa video đã tải
-
-## Cấu trúc
+## Project Structure
 
 ```
 vidgrab/
-├── server.py      # Python backend (Flask + yt-dlp)
-├── index.html     # Giao diện web
-├── config.json    # Tự tạo khi lưu settings
-└── README.md      # File này
+├── server.py        # Backend (Flask + yt-dlp + premium downloaders)
+├── index.html       # Frontend (single-file web UI)
+├── install.sh       # macOS/Linux auto-installer
+├── install.bat      # Windows auto-installer
+├── start.sh         # macOS/Linux launcher
+├── start.bat        # Windows launcher
+├── cookies/         # Stored cookie files (auto-created)
+├── config.json      # User settings (auto-created)
+└── venv/            # Python virtual environment (auto-created)
 ```
 
-## Mẹo
+## Supported Sites
 
-- Video mặc định lưu tại `~/Downloads/VidGrab/`
-- Chất lượng mặc định: 1080p
-- Hỗ trợ tất cả nguồn mà yt-dlp hỗ trợ (1000+ trang web)
-- `Ctrl/Cmd + Enter` để download nhanh
-- `Esc` để đóng Settings
+**Built-in premium support:**
+- Envato Elements (`elements.envato.com`)
+- Storyblocks (`storyblocks.com`)
 
-## Mở rộng trong tương lai
+**Via yt-dlp (1000+ sites):**
+YouTube, Vimeo, Dailymotion, Twitter/X, Facebook, Instagram, TikTok, Twitch, Bilibili, and many more.
 
-App sử dụng yt-dlp làm engine, nên tự động hỗ trợ hầu hết các trang video:
-YouTube, Vimeo, Dailymotion, Twitter/X, Facebook, Instagram, TikTok, v.v.
-Khi cần thêm nguồn như StoryBlocks/Envato, có thể mở rộng bằng custom extractor.
+## Troubleshooting
+
+| Problem | Solution |
+|---------|----------|
+| "Python not found" | Install Python 3.10+ from [python.org](https://python.org) |
+| YouTube 403 error | Update yt-dlp: `venv/bin/pip install -U yt-dlp` |
+| YouTube "page needs reload" | Install deno: `brew install deno` (macOS) |
+| Envato/Storyblocks 403 | Import fresh cookies in Settings |
+| Port 9123 in use | Kill old process: `lsof -ti:9123 \| xargs kill` |
+| macOS "externally managed" | Already handled — uses venv, not system Python |
+
+## Settings
+
+Default download folder: `~/Downloads/VidGrab/`
+
+All settings configurable via the gear icon in the web UI:
+- Download quality & format
+- Download folder path
+- Filename template
+- Concurrent downloads (1-4)
+- Cookie browser (Chrome/Firefox/Safari)

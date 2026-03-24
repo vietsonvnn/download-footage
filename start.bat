@@ -1,18 +1,28 @@
 @echo off
-title VidGrab — Video Downloader
+chcp 65001 >nul 2>&1
+title VidGrab v2.2 — Video Downloader
 cd /d "%~dp0"
 
-:: Check Python
-python --version >nul 2>&1
-if errorlevel 1 (
-    echo ❌ Python not found. Install from https://python.org
-    pause
-    exit /b 1
+:: Auto-install if venv doesn't exist
+if not exist "venv" (
+    echo   First run detected — running installer...
+    call install.bat
+    exit /b
 )
 
-:: Auto-install deps if missing
-python -c "import flask" 2>nul || pip install flask yt-dlp
+call venv\Scripts\activate.bat
 
-echo 🎬 Starting VidGrab...
+:: Quick dep check
+python -c "import flask, yt_dlp, requests" 2>nul
+if errorlevel 1 (
+    echo   [FIX] Missing packages — installing...
+    pip install --quiet flask yt-dlp requests browser_cookie3
+)
+
+echo.
+echo   Starting VidGrab v2.2...
+echo   http://localhost:9123
+echo   Press Ctrl+C to stop
+echo.
 python server.py
 pause
