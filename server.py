@@ -88,7 +88,7 @@ VIDEO_DOMAINS = [
     "tiktok.com", "instagram.com", "twitter.com", "x.com",
     "twitch.tv", "bilibili.com", "nicovideo.jp",
     "storyblocks.com", "www.storyblocks.com",
-    "elements.envato.com", "envato.com",
+    "elements.envato.com", "envato.com", "app.envato.com",
     "dvidshub.net", "www.dvidshub.net",
 ]
 
@@ -165,6 +165,7 @@ def extract_urls(raw_text):
 # ─── Premium Site Downloader (Envato Elements & Storyblocks) ─────────
 PREMIUM_DOMAINS = {
     "elements.envato.com": "envato",
+    "app.envato.com": "envato",
     "www.storyblocks.com": "storyblocks",
     "storyblocks.com": "storyblocks",
     "envato.com": "envato",
@@ -409,14 +410,14 @@ _SB_SEARCH_RE = re.compile(
 )
 # Envato search: /video/stock-video?q=keyword or /video?term=keyword
 _ENVATO_SEARCH_RE = re.compile(
-    r'https?://elements\.envato\.com/'
-    r'(?:[\w-]+/)*(?:video|photos|music|sound-effects|graphics|templates)'
+    r'https?://(?:elements|app)\.envato\.com/'
+    r'(?:[\w-]+/)*(?:video|photos|music|sound-effects|graphics|templates|stock-video)'
     r'(?:/[\w-]+)*\?.*(?:q=|term=|search=)'
 )
 # Envato category: /video/stock-video (no item ID at end)
 _ENVATO_CATEGORY_RE = re.compile(
-    r'https?://elements\.envato\.com/'
-    r'(?:[\w-]+/)*(?:video|photos|music|sound-effects|graphics|templates)'
+    r'https?://(?:elements|app)\.envato\.com/'
+    r'(?:[\w-]+/)*(?:video|photos|music|sound-effects|graphics|templates|stock-video)'
     r'(?:/[\w-]+)?/?$'
 )
 
@@ -424,20 +425,29 @@ _DVIDSHUB_SEARCH_RE = re.compile(
     r'https?://(?:www\.)?dvidshub\.net/search/\?.*(?:q=|query=)', re.I
 )
 
+def _is_envato_item_url(url):
+    """Check if an Envato URL points to a specific item (not a search page)."""
+    path = urlparse(url).path.rstrip("/")
+    # app.envato.com item: /search/stock-video/{UUID}
+    if re.search(r'/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', path, re.I):
+        return True
+    # elements.envato.com item: slug ending with -UPPERCASE_ID
+    last_part = path.split("/")[-1] if path else ""
+    if re.search(r'-[A-Z0-9]{5,}$', last_part):
+        return True
+    return False
+
 def is_search_url(url):
     """Detect if a URL is a search/category page rather than a single item."""
     if _SB_SEARCH_RE.match(url):
         return "storyblocks"
-    # Envato: check for search params or category pages
+    # Envato: check for search params or category pages, but NOT direct item links
     if _ENVATO_SEARCH_RE.match(url):
+        if _is_envato_item_url(url):
+            return None  # Direct item, not a search
         return "envato"
-    # Envato category pages (but NOT single item pages which end with -ITEMID)
     if _ENVATO_CATEGORY_RE.match(url):
-        # Single items end with -UPPERCASE_ID (e.g., -ABC12345)
-        path = urlparse(url).path.rstrip("/")
-        last_part = path.split("/")[-1] if path else ""
-        # If the last part looks like an item slug (has many hyphens + ID suffix), it's NOT a search
-        if re.search(r'-[A-Z0-9]{5,}$', last_part):
+        if _is_envato_item_url(url):
             return None
         return "envato"
     # DVIDSHUB search pages
@@ -912,6 +922,11 @@ def _download_with_progress(session, download_url, filepath, task_id, referer=No
         headers.update(extra_headers)
     resp = session.get(download_url, stream=True, headers=headers, timeout=120, allow_redirects=True)
     resp.raise_for_status()
+    # Validate Content-Type: reject HTML/text responses masquerading as video
+    content_type = resp.headers.get("content-type", "").lower()
+    if "text/html" in content_type or "application/json" in content_type:
+        resp.close()
+        raise Exception(f"Server returned {content_type} instead of video. Check cookies/subscription.")
     total = int(resp.headers.get("content-length", 0))
     downloaded = 0
     with open(filepath, "wb") as f:
@@ -931,8 +946,24 @@ def _download_with_progress(session, download_url, filepath, task_id, referer=No
     return filepath
 
 def _extract_envato_download(session, page_url):
-    """Extract video download URL and title from Envato Elements page."""
-    resp = session.get(page_url, timeout=30)
+    """Extract video download URL and title from Envato page.
+    Supports both:
+    - elements.envato.com (old format, item slug with -ID suffix)
+    - app.envato.com (new format, UUID in path)
+    """
+    domain = _get_url_domain(page_url)
+    is_app = "app.envato.com" in (domain or "")
+
+    # Extract item UUID from app.envato.com URL
+    # Format: app.envato.com/search/stock-video/{UUID}?...
+    item_uuid = None
+    if is_app:
+        m = re.search(r'/stock-video/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})', page_url, re.I)
+        if m:
+            item_uuid = m.group(1)
+
+    # Fetch the page
+    resp = session.get(page_url, timeout=30, allow_redirects=True)
     resp.raise_for_status()
     html = resp.text
 
@@ -942,9 +973,8 @@ def _extract_envato_download(session, page_url):
     m = re.search(r'<title[^>]*>([^<]+)</title>', html)
     if m:
         t = m.group(1).strip()
-        # Remove site suffix like " | Envato Elements"
         t = re.sub(r'\s*[|–—]\s*Envato.*$', '', t).strip()
-        if t and len(t) > 3:
+        if t and len(t) > 3 and t.lower() not in ("unauthorized", "login", "sign in"):
             title = t
     # Strategy 2: <h1>
     if not title:
@@ -956,48 +986,96 @@ def _extract_envato_download(session, page_url):
         m = re.search(r'<meta[^>]*property="og:title"[^>]*content="([^"]+)"', html)
         if m:
             title = re.sub(r'\s*[|–—]\s*Envato.*$', '', m.group(1)).strip()
-    # Strategy 4: JSON "name" field
+    # Strategy 4: JSON "name"/"title" field in page data
     if not title:
-        m = re.search(r'"name"\s*:\s*"([^"]{4,})"', html)
-        if m:
-            title = m.group(1).strip()
+        for pat in [r'"title"\s*:\s*"([^"]{4,})"', r'"name"\s*:\s*"([^"]{4,})"']:
+            m = re.search(pat, html)
+            if m and m.group(1).lower() not in ("unauthorized", "sign in"):
+                title = m.group(1).strip()
+                break
     # Strategy 5: URL slug fallback
     if not title:
         title = _title_from_url(page_url) or "Envato Video"
 
-    # Extract item ID from URL (Envato uses alphanumeric IDs at end of URL)
+    # Detect unauthorized page — means cookies are missing/invalid
+    _bad_titles = {"unauthorized", "unauthorized domain", "login", "sign in", "access denied"}
+    if title.lower().strip() in _bad_titles:
+        raise requests.exceptions.HTTPError(
+            response=type('R', (), {'status_code': 401})(),
+        )
+
+    # Extract item ID from old-format URLs (elements.envato.com)
     item_id = None
-    m = re.search(r'-([A-Z0-9]{6,})(?:\?|$)', page_url)
-    if m:
-        item_id = m.group(1)
-    if not item_id:
-        m = re.search(r'/(\d{5,})', page_url)
+    if not is_app:
+        m = re.search(r'-([A-Z0-9]{6,})(?:\?|$)', page_url)
         if m:
             item_id = m.group(1)
+        if not item_id:
+            m = re.search(r'/(\d{5,})', page_url)
+            if m:
+                item_id = m.group(1)
 
     download_url = None
 
-    # Method 1: Look for video preview/download URLs in page data
-    video_patterns = [
-        r'"videoPreviewUrl"\s*:\s*"([^"]+)"',
-        r'"video_preview_url"\s*:\s*"([^"]+)"',
-        r'"previewUrl"\s*:\s*"([^"]+\.mp4[^"]*)"',
-        r'"preview_url"\s*:\s*"([^"]+)"',
-        r'"downloadUrl"\s*:\s*"([^"]+)"',
-        r'"url"\s*:\s*"(https?://[^"]*\.mp4[^"]*)"',
-        r'src="(https?://[^"]*preview[^"]*\.mp4[^"]*)"',
-        r'"contentUrl"\s*:\s*"([^"]+)"',
-        r'"videoUrl"\s*:\s*"([^"]+)"',
-    ]
-    for pattern in video_patterns:
-        m = re.search(pattern, html)
-        if m:
-            candidate = m.group(1).replace('\\u002F', '/').replace('\\/', '/')
-            if candidate.startswith("http"):
-                download_url = candidate
-                break
+    # ── app.envato.com: Try API with UUID ──
+    if is_app and item_uuid:
+        app_api_endpoints = [
+            ("POST", f"https://app.envato.com/api/download", {"item_id": item_uuid, "item_type": "stock-video", "quality": "1080p"}),
+            ("POST", f"https://app.envato.com/api/v1/download", {"id": item_uuid, "type": "stock-video"}),
+            ("GET", f"https://app.envato.com/api/v1/stock-video/{item_uuid}/download", None),
+            ("GET", f"https://app.envato.com/api/stock-video/{item_uuid}/download", None),
+        ]
+        for method, api_url, payload in app_api_endpoints:
+            try:
+                if method == "POST":
+                    api_resp = session.post(api_url, json=payload, timeout=15)
+                else:
+                    api_resp = session.get(api_url, timeout=15)
+                if api_resp.status_code == 200:
+                    try:
+                        data = api_resp.json()
+                        download_url = (
+                            data.get("download_url") or data.get("url") or
+                            data.get("downloadUrl") or data.get("download") or
+                            data.get("data", {}).get("url") or data.get("data", {}).get("download_url")
+                        )
+                    except (json.JSONDecodeError, AttributeError):
+                        # Maybe the 200 response IS the file directly
+                        ct = api_resp.headers.get("content-type", "")
+                        if "video" in ct or "octet-stream" in ct:
+                            download_url = api_url
+                    if download_url:
+                        break
+            except Exception:
+                continue
 
-    # Method 2: JSON-LD structured data
+    # ── Scrape page for video URLs (both old and new format) ──
+    if not download_url:
+        video_patterns = [
+            r'"videoPreviewUrl"\s*:\s*"([^"]+)"',
+            r'"video_preview_url"\s*:\s*"([^"]+)"',
+            r'"previewUrl"\s*:\s*"([^"]+\.mp4[^"]*)"',
+            r'"preview_url"\s*:\s*"([^"]+)"',
+            r'"downloadUrl"\s*:\s*"([^"]+)"',
+            r'"download_url"\s*:\s*"([^"]+)"',
+            r'"url"\s*:\s*"(https?://[^"]*\.mp4[^"]*)"',
+            r'src="(https?://[^"]*preview[^"]*\.mp4[^"]*)"',
+            r'"contentUrl"\s*:\s*"([^"]+)"',
+            r'"videoUrl"\s*:\s*"([^"]+)"',
+            r'"video_url"\s*:\s*"([^"]+)"',
+            r'"hlsUrl"\s*:\s*"([^"]+)"',
+            r'"hls_url"\s*:\s*"([^"]+)"',
+            r'"src"\s*:\s*"(https?://[^"]*(?:\.mp4|video)[^"]*)"',
+        ]
+        for pattern in video_patterns:
+            m = re.search(pattern, html)
+            if m:
+                candidate = m.group(1).replace('\\u002F', '/').replace('\\/', '/')
+                if candidate.startswith("http"):
+                    download_url = candidate
+                    break
+
+    # ── JSON-LD structured data ──
     if not download_url:
         for m in re.finditer(r'<script[^>]*type="application/ld\+json"[^>]*>(.*?)</script>', html, re.S):
             try:
@@ -1011,7 +1089,7 @@ def _extract_envato_download(session, page_url):
             except (json.JSONDecodeError, AttributeError):
                 continue
 
-    # Method 3: Try Envato download API endpoints
+    # ── Try Envato download API (old elements.envato.com format) ──
     if not download_url and item_id:
         api_endpoints = [
             f"https://elements.envato.com/api/v1/items/{item_id}/download",
@@ -1028,7 +1106,7 @@ def _extract_envato_download(session, page_url):
             except Exception:
                 continue
 
-    # Method 4: HTML5 video source
+    # ── HTML5 video source ──
     if not download_url:
         for m in re.finditer(r'<(?:source|video)[^>]+src="([^"]+)"', html):
             src = m.group(1)
