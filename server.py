@@ -997,12 +997,40 @@ def _extract_envato_download(session, page_url):
     if not title:
         title = _title_from_url(page_url) or "Envato Video"
 
-    # Detect unauthorized page — means cookies are missing/invalid
+    # For app.envato.com SPA: <title> is React shell ("Unauthorized"), real data is in JS
+    # Extract title + content UUID from serialized JS data
+    _content_uuid = None
+    if is_app and item_uuid:
+        # Pattern in JS: /"item_uuid/",/"author/",/"Title/",/"preview_url/"
+        escaped_uuid = re.escape(item_uuid)
+        m = re.search(
+            escaped_uuid + r'[/\\]*"'           # item UUID
+            r'[,\s\d\[\]{}:]*[/\\]*"([^"]+)"'   # author
+            r'[,\s\d\[\]{}:]*[/\\]*"([^"]+)"'   # title
+            r'[,\s\d\[\]{}:]*[/\\]*"(https?://[^"]+\.mp4[^"]*)"',  # preview URL
+            html
+        )
+        if m:
+            js_author = m.group(1).replace('\\/', '/')
+            js_title = m.group(2).replace('\\/', '/')
+            js_preview = m.group(3).replace('\\/', '/')
+            if js_title and len(js_title) > 2:
+                title = js_title.rstrip("\\")
+            # Extract content UUID from preview URL
+            cm = re.search(r'/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/', js_preview)
+            if cm:
+                _content_uuid = cm.group(1)
+
+    # If title is still a SPA shell title, it's not a real auth error for app.envato.com
     _bad_titles = {"unauthorized", "unauthorized domain", "login", "sign in", "access denied"}
     if title.lower().strip() in _bad_titles:
-        raise requests.exceptions.HTTPError(
-            response=type('R', (), {'status_code': 401})(),
-        )
+        if not is_app:
+            # Only treat as auth error for non-SPA (elements.envato.com)
+            raise requests.exceptions.HTTPError(
+                response=type('R', (), {'status_code': 401})(),
+            )
+        # For app.envato.com, use URL-derived title
+        title = _title_from_url(page_url) or "Envato Video"
 
     # Extract item ID from old-format URLs (elements.envato.com)
     item_id = None
@@ -1017,37 +1045,29 @@ def _extract_envato_download(session, page_url):
 
     download_url = None
 
-    # ── app.envato.com: Try API with UUID ──
-    if is_app and item_uuid:
-        app_api_endpoints = [
-            ("POST", f"https://app.envato.com/api/download", {"item_id": item_uuid, "item_type": "stock-video", "quality": "1080p"}),
-            ("POST", f"https://app.envato.com/api/v1/download", {"id": item_uuid, "type": "stock-video"}),
-            ("GET", f"https://app.envato.com/api/v1/stock-video/{item_uuid}/download", None),
-            ("GET", f"https://app.envato.com/api/stock-video/{item_uuid}/download", None),
-        ]
-        for method, api_url, payload in app_api_endpoints:
-            try:
-                if method == "POST":
-                    api_resp = session.post(api_url, json=payload, timeout=15)
-                else:
-                    api_resp = session.get(api_url, timeout=15)
-                if api_resp.status_code == 200:
-                    try:
-                        data = api_resp.json()
-                        download_url = (
-                            data.get("download_url") or data.get("url") or
-                            data.get("downloadUrl") or data.get("download") or
-                            data.get("data", {}).get("url") or data.get("data", {}).get("download_url")
-                        )
-                    except (json.JSONDecodeError, AttributeError):
-                        # Maybe the 200 response IS the file directly
-                        ct = api_resp.headers.get("content-type", "")
-                        if "video" in ct or "octet-stream" in ct:
-                            download_url = api_url
-                    if download_url:
-                        break
-            except Exception:
-                continue
+    # ── app.envato.com: Find preview URL from JS data ──
+    if is_app and _content_uuid:
+        # Find the preview MP4 URL that matches this item's content UUID
+        pattern = re.escape(_content_uuid) + r'[^"]*preview[^"]*\.mp4[^"]*'
+        all_mp4 = re.findall(r'"(https://public-assets[^"]+\.mp4[^"]*)"', html)
+        for mp4_url in all_mp4:
+            if _content_uuid in mp4_url:
+                download_url = mp4_url.replace('\\/', '/')
+                break
+
+    # ── app.envato.com: Try download API (may be Cloudflare-protected) ──
+    if not download_url and is_app and item_uuid:
+        try:
+            api_resp = session.post(
+                "https://elements.envato.com/api/v1/downloads",
+                json={"item_uuid": item_uuid},
+                timeout=15,
+            )
+            if api_resp.status_code == 200:
+                data = api_resp.json()
+                download_url = data.get("download_url") or data.get("url") or data.get("downloadUrl")
+        except Exception:
+            pass
 
     # ── Scrape page for video URLs (both old and new format) ──
     if not download_url:
