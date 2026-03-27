@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-VidGrab v2.1 — Lightweight Video Downloader
+VidGrab v2.2 — Lightweight Video Downloader
 Flask backend + yt-dlp engine | macOS & Windows
 Hardened by 4 QA agents + smart URL sanitizer
 """
@@ -89,6 +89,7 @@ VIDEO_DOMAINS = [
     "twitch.tv", "bilibili.com", "nicovideo.jp",
     "storyblocks.com", "www.storyblocks.com",
     "elements.envato.com", "envato.com",
+    "dvidshub.net", "www.dvidshub.net",
 ]
 
 _URL_RE = re.compile(r'https?://[^\s<>\[\]\(\)\"\'「」\u201c\u201d\u2018\u2019,;!]+', re.I)
@@ -167,6 +168,8 @@ PREMIUM_DOMAINS = {
     "www.storyblocks.com": "storyblocks",
     "storyblocks.com": "storyblocks",
     "envato.com": "envato",
+    "www.dvidshub.net": "dvidshub",
+    "dvidshub.net": "dvidshub",
 }
 
 COOKIES_DIR = Path(__file__).parent / "cookies"
@@ -185,7 +188,7 @@ def is_premium_url(url):
     if domain in PREMIUM_DOMAINS:
         return True
     # Substring fallback for variants like www.elements.envato.com
-    if domain and ("envato.com" in domain or "storyblocks.com" in domain):
+    if domain and ("envato.com" in domain or "storyblocks.com" in domain or "dvidshub.net" in domain):
         return True
     return False
 
@@ -198,6 +201,8 @@ def _get_premium_site_type(url):
         return "envato"
     if domain and "storyblocks.com" in domain:
         return "storyblocks"
+    if domain and "dvidshub.net" in domain:
+        return "dvidshub"
     return "unknown"
 
 def _load_cookie_file(site_type):
@@ -294,6 +299,7 @@ def _get_premium_session(site_type, browser="chrome"):
         domain_map = {
             "envato": "envato.com",
             "storyblocks": "storyblocks.com",
+            "dvidshub": "dvidshub.net",
         }
         domain = domain_map.get(site_type, "")
         loaders = {
@@ -327,6 +333,10 @@ _ENVATO_CATEGORY_RE = re.compile(
     r'(?:/[\w-]+)?/?$'
 )
 
+_DVIDSHUB_SEARCH_RE = re.compile(
+    r'https?://(?:www\.)?dvidshub\.net/search/\?.*(?:q=|query=)', re.I
+)
+
 def is_search_url(url):
     """Detect if a URL is a search/category page rather than a single item."""
     if _SB_SEARCH_RE.match(url):
@@ -343,6 +353,9 @@ def is_search_url(url):
         if re.search(r'-[A-Z0-9]{5,}$', last_part):
             return None
         return "envato"
+    # DVIDSHUB search pages
+    if _DVIDSHUB_SEARCH_RE.match(url):
+        return "dvidshub"
     return None
 
 def _scrape_storyblocks_search(session, search_url, max_pages=5):
@@ -580,6 +593,147 @@ def _scrape_envato_search(session, search_url, max_pages=5):
 
     return results
 
+def _scrape_dvidshub_search(session, search_url, max_pages=5):
+    """Scrape all video URLs from a DVIDSHUB search page.
+    Returns list of (video_url, title) tuples.
+    """
+    from urllib.parse import urlencode, urlparse, parse_qs
+
+    results = []
+    seen_urls = set()
+
+    for page in range(1, max_pages + 1):
+        parsed = urlparse(search_url)
+        qs = parse_qs(parsed.query)
+        qs["page"] = [str(page)]
+        # Ensure we're searching for videos
+        if "filter[type]" not in qs and "filter%5Btype%5D" not in parsed.query:
+            qs["filter[type]"] = ["video"]
+        page_url = f"{parsed.scheme}://{parsed.netloc}{parsed.path}?{urlencode(qs, doseq=True)}"
+
+        try:
+            resp = session.get(page_url, timeout=30)
+            if resp.status_code != 200:
+                break
+            html = resp.text
+        except Exception:
+            break
+
+        page_results = []
+
+        # Method 1: Look for video links in search results
+        # DVIDSHUB pattern: /video/XXXXXX/title-slug
+        for m in re.finditer(r'href="((?:https?://www\.dvidshub\.net)?/video/(\d+)/([^"]+))"', html):
+            href = m.group(1)
+            if href.startswith("/"):
+                href = f"https://www.dvidshub.net{href}"
+            if href not in seen_urls:
+                seen_urls.add(href)
+                slug = m.group(3).rstrip("/")
+                title = slug.replace("-", " ").title() or "DVIDSHUB Video"
+                page_results.append((href, title))
+
+        # Method 2: Look for data attributes or JSON with video IDs
+        if not page_results:
+            for m in re.finditer(r'data-id="(\d+)"[^>]*data-title="([^"]*)"', html):
+                vid_id = m.group(1)
+                title = m.group(2) or f"DVIDSHUB Video {vid_id}"
+                href = f"https://www.dvidshub.net/video/{vid_id}"
+                if href not in seen_urls:
+                    seen_urls.add(href)
+                    page_results.append((href, title))
+
+        if not page_results:
+            break
+
+        results.extend(page_results)
+
+    return results
+
+
+def _extract_dvidshub_download(session, page_url):
+    """Extract video download URL and title from DVIDSHUB page.
+    Flow: video page → /download/popup/{ID} → pick best /download/videofile/{FILE_ID}
+    """
+    # Extract video ID from URL: /video/XXXXXX or /video/XXXXXX/slug
+    m = re.search(r'/video/(\d+)', page_url)
+    if not m:
+        return None, None
+    video_id = m.group(1)
+
+    # Get video page for title
+    title = None
+    try:
+        resp = session.get(page_url, timeout=30)
+        if resp.status_code == 200:
+            html = resp.text
+            # Title from <title> tag
+            tm = re.search(r'<title[^>]*>([^<]+)</title>', html)
+            if tm:
+                t = tm.group(1).strip()
+                t = re.sub(r'\s*[|–—]\s*DVIDS.*$', '', t).strip()
+                if t and len(t) > 3:
+                    title = t
+            # Fallback: <h1>
+            if not title:
+                tm = re.search(r'<h1[^>]*>([^<]+)</h1>', html)
+                if tm:
+                    title = tm.group(1).strip()
+            # Fallback: og:title
+            if not title:
+                tm = re.search(r'<meta[^>]*property="og:title"[^>]*content="([^"]+)"', html)
+                if tm:
+                    title = re.sub(r'\s*[|–—]\s*DVIDS.*$', '', tm.group(1)).strip()
+    except Exception:
+        pass
+
+    if not title:
+        title = _title_from_url(page_url) or f"DVIDSHUB Video {video_id}"
+
+    # Fetch download popup to get available file versions
+    download_url = None
+    popup_url = f"https://www.dvidshub.net/download/popup/{video_id}"
+    try:
+        resp = session.get(popup_url, timeout=30)
+        if resp.status_code == 200:
+            popup_html = resp.text
+            # Parse download links: /download/videofile/XXXXXXX with resolution and size
+            # Pattern: href="/download/videofile/XXXXX" ... WxH ... SIZE MB
+            files = []
+            for fm in re.finditer(
+                r'href="(/download/videofile/(\d+))"[^>]*>.*?(\d+)\s*x\s*(\d+).*?(\d+)\s*MB',
+                popup_html, re.S
+            ):
+                file_path = fm.group(1)
+                file_id = fm.group(2)
+                width = int(fm.group(3))
+                height = int(fm.group(4))
+                size_mb = int(fm.group(5))
+                pixels = width * height
+                files.append((pixels, size_mb, file_id, file_path, width, height))
+
+            # Fallback: simpler pattern just matching videofile links
+            if not files:
+                for fm in re.finditer(r'href="(/download/videofile/(\d+))"', popup_html):
+                    file_path = fm.group(1)
+                    file_id = fm.group(2)
+                    files.append((0, 0, file_id, file_path, 0, 0))
+
+            if files:
+                # Pick the highest resolution (most pixels), fallback to largest file
+                files.sort(key=lambda x: (x[0], x[1]), reverse=True)
+                best = files[0]
+                download_url = f"https://www.dvidshub.net{best[3]}"
+    except Exception:
+        pass
+
+    # Fallback: try direct download endpoint
+    if not download_url:
+        download_url = f"https://www.dvidshub.net/download/videofile/{video_id}"
+
+    return title, download_url
+
+
 def expand_search_urls(urls, cfg):
     """Expand any search/category URLs into individual video URLs.
     Returns (expanded_urls, search_stats).
@@ -611,6 +765,8 @@ def expand_search_urls(urls, cfg):
                 results = _scrape_storyblocks_search(session, url)
             elif site == "envato":
                 results = _scrape_envato_search(session, url)
+            elif site == "dvidshub":
+                results = _scrape_dvidshub_search(session, url)
             else:
                 results = []
 
@@ -925,6 +1081,8 @@ def premium_download_worker(task_id, url, cfg):
                 title, download_url = _extract_envato_download(session, url)
             elif site_type == "storyblocks":
                 title, download_url = _extract_storyblocks_download(session, url)
+            elif site_type == "dvidshub":
+                title, download_url = _extract_dvidshub_download(session, url)
             else:
                 with download_lock:
                     if task_id in downloads:
@@ -1182,6 +1340,8 @@ def preview_search():
             results = _scrape_storyblocks_search(session, url, max_pages=1)
         elif site == "envato":
             results = _scrape_envato_search(session, url, max_pages=1)
+        elif site == "dvidshub":
+            results = _scrape_dvidshub_search(session, url, max_pages=1)
         else:
             results = []
         return jsonify({
@@ -1279,7 +1439,7 @@ def open_folder():
 def cookies_status():
     """Get status of imported cookie files for each premium site."""
     result = {}
-    for site_type in ("envato", "storyblocks"):
+    for site_type in ("envato", "storyblocks", "dvidshub"):
         info = _get_cookie_file_info(site_type)
         result[site_type] = info or {"exists": False}
     return jsonify(result)
@@ -1289,8 +1449,8 @@ def import_cookies(site_type):
     """Import a JSON cookie file for a premium site.
     Accepts: JSON body with cookie array, or multipart file upload.
     """
-    if site_type not in ("envato", "storyblocks"):
-        return jsonify({"error": "Invalid site. Use 'envato' or 'storyblocks'."}), 400
+    if site_type not in ("envato", "storyblocks", "dvidshub"):
+        return jsonify({"error": "Invalid site. Use 'envato', 'storyblocks', or 'dvidshub'."}), 400
 
     cookie_data = None
 
@@ -1354,7 +1514,7 @@ def import_cookies(site_type):
 @app.route("/api/cookies/delete/<site_type>", methods=["POST"])
 def delete_cookies(site_type):
     """Delete stored cookies for a premium site."""
-    if site_type not in ("envato", "storyblocks"):
+    if site_type not in ("envato", "storyblocks", "dvidshub"):
         return jsonify({"error": "Invalid site."}), 400
     cookie_file = COOKIES_DIR / f"{site_type}.json"
     try:
@@ -1382,6 +1542,6 @@ def check_deps():
 if __name__ == "__main__":
     import webbrowser
     port = int(os.environ.get("PORT", 9123))
-    print(f"\n  🎬 VidGrab v2.1 — http://localhost:{port}\n  Press Ctrl+C to stop\n")
+    print(f"\n  🎬 VidGrab v2.2 — http://localhost:{port}\n  Press Ctrl+C to stop\n")
     threading.Timer(1.2, lambda: webbrowser.open(f"http://localhost:{port}")).start()
     app.run(host="127.0.0.1", port=port, debug=False)

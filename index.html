@@ -165,6 +165,7 @@
   .source-badge.envato { background: rgba(130,209,72,0.15); color: #82d148; }
   .source-badge.storyblocks { background: rgba(0,180,255,0.15); color: #00b4ff; }
   .source-badge.youtube { background: rgba(255,0,0,0.12); color: #ff4444; }
+  .source-badge.dvidshub { background: rgba(255,193,7,0.15); color: #ffc107; }
 
   .cookie-card {
     background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
@@ -279,7 +280,7 @@
   <div class="input-card">
     <label for="urlInput">Paste video URLs <span style="opacity:0.5">(one per line for bulk download)</span></label>
     <textarea class="url-input" id="urlInput"
-      placeholder="Paste anything — URLs tự detect:&#10;https://www.youtube.com/watch?v=...&#10;youtube.com/watch?v=... (auto-fix https)&#10;dQw4w9WgXcQ (YouTube ID)&#10;https://elements.envato.com/... (Envato — single video)&#10;https://www.storyblocks.com/video/... (Storyblocks — single)&#10;https://www.storyblocks.com/all-video/search/keyword (search → bulk download)"></textarea>
+      placeholder="Paste anything — URLs tự detect:&#10;https://www.youtube.com/watch?v=...&#10;youtube.com/watch?v=... (auto-fix https)&#10;dQw4w9WgXcQ (YouTube ID)&#10;https://elements.envato.com/... (Envato — single video)&#10;https://www.storyblocks.com/video/... (Storyblocks — single)&#10;https://www.storyblocks.com/all-video/search/keyword (search → bulk download)&#10;https://www.dvidshub.net/video/... (DVIDSHUB — cookie auth)"></textarea>
     <div class="input-footer">
       <div>
         <span class="url-count" id="urlCount">0 URLs</span>
@@ -315,7 +316,7 @@
     <div class="field"><label>Concurrent Downloads</label>
       <select id="cfgConcurrent"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select></div>
     <div style="border-top:1px solid var(--border); margin:20px 0 16px; padding-top:16px;">
-      <label style="display:block;font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px;">Premium Sites (Envato & Storyblocks)</label>
+      <label style="display:block;font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px;">Premium Sites (Envato, Storyblocks & DVIDSHUB)</label>
       <p style="font-size:12px;color:var(--text2);margin-bottom:16px;line-height:1.6;">
         Import cookies from your browser to download from premium sites.<br>
         Use a browser extension like <strong>Cookie-Editor</strong> or <strong>EditThisCookie</strong> to export cookies as JSON.
@@ -354,6 +355,24 @@
         <div class="cookie-paste-box" id="cookiePasteStoryblocks" style="display:none">
           <textarea class="cookie-paste-input" id="cookiePasteInputStoryblocks" placeholder='Paste cookie JSON here (array format from Cookie-Editor)...'></textarea>
           <button class="btn-cookie-save" onclick="savePastedCookies('storyblocks')">Save Cookies</button>
+        </div>
+      </div>
+
+      <!-- DVIDSHUB cookie card -->
+      <div class="cookie-card" id="cookieCardDvidshub">
+        <div class="cookie-card-header">
+          <span class="cookie-site-label"><span class="source-badge dvidshub" style="margin:0">DVIDSHUB</span> Defense Media</span>
+          <span class="cookie-status" id="cookieStatusDvidshub">No cookies</span>
+        </div>
+        <div class="cookie-card-actions">
+          <label class="btn-cookie-import" for="cookieFileDvidshub">Import JSON</label>
+          <input type="file" id="cookieFileDvidshub" accept=".json,.txt" style="display:none" onchange="uploadCookieFile('dvidshub', this)">
+          <button class="btn-cookie-paste" onclick="togglePasteBox('dvidshub')">Paste JSON</button>
+          <button class="btn-cookie-delete" id="cookieDeleteDvidshub" onclick="deleteCookies('dvidshub')" style="display:none">Delete</button>
+        </div>
+        <div class="cookie-paste-box" id="cookiePasteDvidshub" style="display:none">
+          <textarea class="cookie-paste-input" id="cookiePasteInputDvidshub" placeholder='Paste cookie JSON here (array format from Cookie-Editor)...'></textarea>
+          <button class="btn-cookie-save" onclick="savePastedCookies('dvidshub')">Save Cookies</button>
         </div>
       </div>
     </div>
@@ -437,7 +456,7 @@ async function startDownload() {
   const btn = document.getElementById('btnDownload');
   btn.disabled = true;
   // Check if search URLs are present for better UX feedback
-  const hasSearchUrl = urls.match(/storyblocks\.com\/.*\/search\/|elements\.envato\.com\/.+\?/);
+  const hasSearchUrl = urls.match(/storyblocks\.com\/.*\/search\/|elements\.envato\.com\/.+\?|dvidshub\.net\/search\/\?/);
   btn.textContent = hasSearchUrl ? '🔍 Scanning search pages...' : '⏳ Starting...';
   try {
     await fetch(`${API}/api/config`, {
@@ -529,6 +548,7 @@ function renderQueue(data) {
     const url = t.url || '';
     if (url.includes('envato.com')) sourceBadge = '<span class="source-badge envato">Envato</span>';
     else if (url.includes('storyblocks.com')) sourceBadge = '<span class="source-badge storyblocks">Storyblocks</span>';
+    else if (url.includes('dvidshub.net')) sourceBadge = '<span class="source-badge dvidshub">DVIDSHUB</span>';
     else if (url.includes('youtube.com') || url.includes('youtu.be')) sourceBadge = '<span class="source-badge youtube">YouTube</span>';
 
     const cancelBtn = (t.status === 'downloading' || t.status === 'queued')
@@ -675,7 +695,7 @@ async function loadCookieStatus() {
   try {
     const res = await fetch(`${API}/api/cookies/status`);
     const data = await res.json();
-    for (const site of ['envato', 'storyblocks']) {
+    for (const site of ['envato', 'storyblocks', 'dvidshub']) {
       const key = site.charAt(0).toUpperCase() + site.slice(1);
       const statusEl = document.getElementById(`cookieStatus${key}`);
       const deleteBtn = document.getElementById(`cookieDelete${key}`);
