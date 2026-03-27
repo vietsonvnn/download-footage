@@ -316,63 +316,43 @@
     <div class="field"><label>Concurrent Downloads</label>
       <select id="cfgConcurrent"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select></div>
     <div style="border-top:1px solid var(--border); margin:20px 0 16px; padding-top:16px;">
-      <label style="display:block;font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px;">Premium Sites (Envato, Storyblocks & DVIDSHUB)</label>
+      <label style="display:block;font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px;">Cookie Import (All Sites)</label>
       <p style="font-size:12px;color:var(--text2);margin-bottom:16px;line-height:1.6;">
-        Import cookies from your browser to download from premium sites.<br>
-        Use a browser extension like <strong>Cookie-Editor</strong> or <strong>EditThisCookie</strong> to export cookies as JSON.
+        Import cookies <strong>once</strong> → auto-split to Envato, Storyblocks, DVIDSHUB & YouTube/yt-dlp.<br>
+        Use <strong>Cookie-Editor</strong> extension → Export as JSON (all cookies).
       </p>
 
-      <!-- Envato cookie card -->
-      <div class="cookie-card" id="cookieCardEnvato">
-        <div class="cookie-card-header">
-          <span class="cookie-site-label"><span class="source-badge envato" style="margin:0">Envato</span> Elements</span>
-          <span class="cookie-status" id="cookieStatusEnvato">No cookies</span>
+      <!-- Universal import card -->
+      <div class="cookie-card">
+        <div class="cookie-card-actions" style="margin-bottom:0">
+          <label class="btn-cookie-import" for="cookieFileAll" style="flex:1;text-align:center;padding:10px;font-size:13px;font-weight:600;background:var(--accent);border-color:var(--accent);color:#fff">📂 Import JSON (All Sites)</label>
+          <input type="file" id="cookieFileAll" accept=".json,.txt" style="display:none" onchange="uploadAllCookies(this)">
+          <button class="btn-cookie-paste" onclick="togglePasteBox('all')" style="flex:1;text-align:center;padding:10px">📋 Paste JSON</button>
+          <button class="btn-cookie-delete" onclick="deleteAllCookies()" id="btnDeleteAll" style="display:none;padding:10px">🗑 Delete All</button>
         </div>
-        <div class="cookie-card-actions">
-          <label class="btn-cookie-import" for="cookieFileEnvato">Import JSON</label>
-          <input type="file" id="cookieFileEnvato" accept=".json,.txt" style="display:none" onchange="uploadCookieFile('envato', this)">
-          <button class="btn-cookie-paste" onclick="togglePasteBox('envato')">Paste JSON</button>
-          <button class="btn-cookie-delete" id="cookieDeleteEnvato" onclick="deleteCookies('envato')" style="display:none">Delete</button>
-        </div>
-        <div class="cookie-paste-box" id="cookiePasteEnvato" style="display:none">
-          <textarea class="cookie-paste-input" id="cookiePasteInputEnvato" placeholder='Paste cookie JSON here (array format from Cookie-Editor)...'></textarea>
-          <button class="btn-cookie-save" onclick="savePastedCookies('envato')">Save Cookies</button>
+        <div class="cookie-paste-box" id="cookiePasteAll" style="display:none">
+          <textarea class="cookie-paste-input" id="cookiePasteInputAll" placeholder='Paste ALL cookies JSON here (array from Cookie-Editor)...' style="min-height:100px"></textarea>
+          <button class="btn-cookie-save" onclick="saveAllPastedCookies()">Save & Split to All Sites</button>
         </div>
       </div>
 
-      <!-- Storyblocks cookie card -->
-      <div class="cookie-card" id="cookieCardStoryblocks">
-        <div class="cookie-card-header">
-          <span class="cookie-site-label"><span class="source-badge storyblocks" style="margin:0">Storyblocks</span> Video</span>
-          <span class="cookie-status" id="cookieStatusStoryblocks">No cookies</span>
+      <!-- Per-site status (read-only) -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px" id="cookieSiteGrid">
+        <div class="cookie-card" style="padding:10px 12px;margin:0">
+          <span class="cookie-site-label" style="font-size:12px"><span class="source-badge envato" style="margin:0">Envato</span></span>
+          <span class="cookie-status" id="cookieStatusEnvato" style="font-size:10px;margin-top:4px;display:block">No cookies</span>
         </div>
-        <div class="cookie-card-actions">
-          <label class="btn-cookie-import" for="cookieFileStoryblocks">Import JSON</label>
-          <input type="file" id="cookieFileStoryblocks" accept=".json,.txt" style="display:none" onchange="uploadCookieFile('storyblocks', this)">
-          <button class="btn-cookie-paste" onclick="togglePasteBox('storyblocks')">Paste JSON</button>
-          <button class="btn-cookie-delete" id="cookieDeleteStoryblocks" onclick="deleteCookies('storyblocks')" style="display:none">Delete</button>
+        <div class="cookie-card" style="padding:10px 12px;margin:0">
+          <span class="cookie-site-label" style="font-size:12px"><span class="source-badge storyblocks" style="margin:0">Storyblocks</span></span>
+          <span class="cookie-status" id="cookieStatusStoryblocks" style="font-size:10px;margin-top:4px;display:block">No cookies</span>
         </div>
-        <div class="cookie-paste-box" id="cookiePasteStoryblocks" style="display:none">
-          <textarea class="cookie-paste-input" id="cookiePasteInputStoryblocks" placeholder='Paste cookie JSON here (array format from Cookie-Editor)...'></textarea>
-          <button class="btn-cookie-save" onclick="savePastedCookies('storyblocks')">Save Cookies</button>
+        <div class="cookie-card" style="padding:10px 12px;margin:0">
+          <span class="cookie-site-label" style="font-size:12px"><span class="source-badge dvidshub" style="margin:0">DVIDSHUB</span></span>
+          <span class="cookie-status" id="cookieStatusDvidshub" style="font-size:10px;margin-top:4px;display:block">No cookies</span>
         </div>
-      </div>
-
-      <!-- DVIDSHUB cookie card -->
-      <div class="cookie-card" id="cookieCardDvidshub">
-        <div class="cookie-card-header">
-          <span class="cookie-site-label"><span class="source-badge dvidshub" style="margin:0">DVIDSHUB</span> Defense Media</span>
-          <span class="cookie-status" id="cookieStatusDvidshub">No cookies</span>
-        </div>
-        <div class="cookie-card-actions">
-          <label class="btn-cookie-import" for="cookieFileDvidshub">Import JSON</label>
-          <input type="file" id="cookieFileDvidshub" accept=".json,.txt" style="display:none" onchange="uploadCookieFile('dvidshub', this)">
-          <button class="btn-cookie-paste" onclick="togglePasteBox('dvidshub')">Paste JSON</button>
-          <button class="btn-cookie-delete" id="cookieDeleteDvidshub" onclick="deleteCookies('dvidshub')" style="display:none">Delete</button>
-        </div>
-        <div class="cookie-paste-box" id="cookiePasteDvidshub" style="display:none">
-          <textarea class="cookie-paste-input" id="cookiePasteInputDvidshub" placeholder='Paste cookie JSON here (array format from Cookie-Editor)...'></textarea>
-          <button class="btn-cookie-save" onclick="savePastedCookies('dvidshub')">Save Cookies</button>
+        <div class="cookie-card" style="padding:10px 12px;margin:0">
+          <span class="cookie-site-label" style="font-size:12px"><span class="source-badge youtube" style="margin:0">YouTube</span> & others</span>
+          <span class="cookie-status" id="cookieStatusYtdlp" style="font-size:10px;margin-top:4px;display:block">No cookies</span>
         </div>
       </div>
     </div>
@@ -628,45 +608,45 @@ function toast(msg, type) {
   setTimeout(() => t.classList.remove('show'), 3000);
 }
 
-// ── Cookie Management ──
+// ── Cookie Management (Universal Import) ──
 function togglePasteBox(site) {
-  const box = document.getElementById(`cookiePaste${site.charAt(0).toUpperCase() + site.slice(1)}`);
+  const key = site.charAt(0).toUpperCase() + site.slice(1);
+  const box = document.getElementById(`cookiePaste${key}`);
   box.style.display = box.style.display === 'none' ? 'block' : 'none';
 }
 
-async function uploadCookieFile(site, input) {
+async function uploadAllCookies(input) {
   const file = input.files[0];
   if (!file) return;
   try {
     const text = await file.text();
     const data = JSON.parse(text);
     const cookies = Array.isArray(data) ? data : data.cookies || data;
-    await submitCookies(site, cookies);
+    await submitAllCookies(cookies);
   } catch (e) {
     toast(`Invalid JSON file: ${e.message}`, 'error');
   }
   input.value = '';
 }
 
-async function savePastedCookies(site) {
-  const key = site.charAt(0).toUpperCase() + site.slice(1);
-  const textarea = document.getElementById(`cookiePasteInput${key}`);
+async function saveAllPastedCookies() {
+  const textarea = document.getElementById('cookiePasteInputAll');
   const raw = textarea.value.trim();
   if (!raw) { toast('Paste cookie JSON first', 'error'); return; }
   try {
     const data = JSON.parse(raw);
     const cookies = Array.isArray(data) ? data : data.cookies || data;
-    await submitCookies(site, cookies);
+    await submitAllCookies(cookies);
     textarea.value = '';
-    document.getElementById(`cookiePaste${key}`).style.display = 'none';
+    document.getElementById('cookiePasteAll').style.display = 'none';
   } catch (e) {
     toast(`Invalid JSON: ${e.message}`, 'error');
   }
 }
 
-async function submitCookies(site, cookies) {
+async function submitAllCookies(cookies) {
   try {
-    const res = await fetch(`${API}/api/cookies/import/${site}`, {
+    const res = await fetch(`${API}/api/cookies/import-all`, {
       method: 'POST', headers: {'Content-Type': 'application/json'},
       body: JSON.stringify({ cookies })
     });
@@ -679,9 +659,9 @@ async function submitCookies(site, cookies) {
   }
 }
 
-async function deleteCookies(site) {
+async function deleteAllCookies() {
   try {
-    const res = await fetch(`${API}/api/cookies/delete/${site}`, { method: 'POST' });
+    const res = await fetch(`${API}/api/cookies/delete-all`, { method: 'POST' });
     const data = await res.json();
     if (data.error) { toast(data.error, 'error'); return; }
     toast(data.message);
@@ -695,23 +675,31 @@ async function loadCookieStatus() {
   try {
     const res = await fetch(`${API}/api/cookies/status`);
     const data = await res.json();
+    let anyExists = false;
     for (const site of ['envato', 'storyblocks', 'dvidshub']) {
       const key = site.charAt(0).toUpperCase() + site.slice(1);
       const statusEl = document.getElementById(`cookieStatus${key}`);
-      const deleteBtn = document.getElementById(`cookieDelete${key}`);
       const info = data[site];
       if (info && info.exists) {
-        const date = new Date(info.imported_at * 1000);
-        const dateStr = date.toLocaleDateString() + ' ' + date.toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
-        statusEl.textContent = `${info.cookie_count} cookies · ${dateStr}`;
+        statusEl.textContent = `✓ ${info.cookie_count} cookies`;
         statusEl.className = 'cookie-status active';
-        deleteBtn.style.display = '';
+        anyExists = true;
       } else {
         statusEl.textContent = 'No cookies';
         statusEl.className = 'cookie-status';
-        deleteBtn.style.display = 'none';
       }
     }
+    // yt-dlp cookie file status
+    const ytEl = document.getElementById('cookieStatusYtdlp');
+    if (data._ytdlp) {
+      ytEl.textContent = `✓ cookies.txt`;
+      ytEl.className = 'cookie-status active';
+      anyExists = true;
+    } else {
+      ytEl.textContent = anyExists ? '✓ cookies.txt' : 'No cookies';
+      ytEl.className = anyExists ? 'cookie-status active' : 'cookie-status';
+    }
+    document.getElementById('btnDeleteAll').style.display = anyExists ? '' : 'none';
   } catch (e) {}
 }
 
