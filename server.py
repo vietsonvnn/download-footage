@@ -880,15 +880,16 @@ def expand_search_urls(urls, cfg):
 
     return expanded, search_stats
 
-def _sanitize_filename(name, ext="mp4"):
-    """Make a safe filename from title."""
+def _sanitize_filename(name, ext="mp4", seq=None):
+    """Make a safe filename from title. If seq is given, prefix with zero-padded number."""
     name = re.sub(r'[<>:"/\\|?*]', '', name)
     name = name.strip('. ')
-    # Truncate very long names
     if len(name) > 200:
         name = name[:200]
     if not name:
         name = f"download_{int(time.time())}"
+    if seq is not None:
+        return f"{seq:02d}. {name}.{ext}"
     return f"{name}.{ext}"
 
 def _title_from_url(url):
@@ -969,13 +970,18 @@ def _extract_envato_download(session, page_url):
 
     # Extract title - multiple strategies
     title = None
-    # Strategy 1: <title> tag
-    m = re.search(r'<title[^>]*>([^<]+)</title>', html)
-    if m:
-        t = m.group(1).strip()
+    # Strategy 1: <title> tag — for SPA pages, pick the best from ALL title tags
+    _skip_titles = {"unauthorized", "login", "sign in", "imagegen", "imageedit",
+                    "videogen", "musicgen", "voicegen", "soundgen", "graphicsgen",
+                    "mockupgen", "photos", "videos", "video templates", "music",
+                    "sound effects", "graphics", "fonts", "3d", "web", "wordpress",
+                    "add-ons", "workspaces", "generation history"}
+    for tm in re.finditer(r'<title[^>]*>([^<]+)</title>', html):
+        t = tm.group(1).strip()
         t = re.sub(r'\s*[|–—]\s*Envato.*$', '', t).strip()
-        if t and len(t) > 3 and t.lower() not in ("unauthorized", "login", "sign in"):
+        if t and len(t) > 3 and t.lower() not in _skip_titles:
             title = t
+            break  # Use first meaningful title
     # Strategy 2: <h1>
     if not title:
         m = re.search(r'<h1[^>]*>([^<]+)</h1>', html)
@@ -997,25 +1003,27 @@ def _extract_envato_download(session, page_url):
     if not title:
         title = _title_from_url(page_url) or "Envato Video"
 
-    # For app.envato.com SPA: <title> is React shell ("Unauthorized"), real data is in JS
-    # Extract title + content UUID from serialized JS data
+    # For app.envato.com SPA: extract data from HTML card + JS data
     _content_uuid = None
     if is_app and item_uuid:
-        # Pattern in JS: /"item_uuid/",/"author/",/"Title/",/"preview_url/"
         escaped_uuid = re.escape(item_uuid)
+
+        # Title: from data-analytics-item_title attribute (most reliable)
+        tm = re.search(r'data-analytics-item_id="' + escaped_uuid + r'"[^>]*data-analytics-item_title="([^"]+)"', html)
+        if not tm:
+            tm = re.search(r'data-analytics-item_title="([^"]+)"[^>]*data-analytics-item_id="' + escaped_uuid + r'"', html)
+        if tm:
+            title = tm.group(1).strip()
+
+        # Preview URL: from JS serialized data — find UUID followed by MP4 URL
         m = re.search(
-            escaped_uuid + r'[/\\]*"'           # item UUID
-            r'[,\s\d\[\]{}:]*[/\\]*"([^"]+)"'   # author
-            r'[,\s\d\[\]{}:]*[/\\]*"([^"]+)"'   # title
-            r'[,\s\d\[\]{}:]*[/\\]*"(https?://[^"]+\.mp4[^"]*)"',  # preview URL
+            escaped_uuid + r'[\\/"]*,'               # item UUID
+            r'.*?'                                    # skip fields (non-greedy)
+            r'(https?://public-assets[^"\\]+\.mp4)',  # capture: preview MP4 URL
             html
         )
         if m:
-            js_author = m.group(1).replace('\\/', '/')
-            js_title = m.group(2).replace('\\/', '/')
-            js_preview = m.group(3).replace('\\/', '/')
-            if js_title and len(js_title) > 2:
-                title = js_title.rstrip("\\")
+            js_preview = m.group(1)
             # Extract content UUID from preview URL
             cm = re.search(r'/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/', js_preview)
             if cm:
@@ -1306,7 +1314,9 @@ def premium_download_worker(task_id, url, cfg):
         # Download the file
         dl_dir = cfg.get("download_dir", DEFAULT_CONFIG["download_dir"])
         os.makedirs(dl_dir, exist_ok=True)
-        filename = _sanitize_filename(title, "mp4")
+        with download_lock:
+            seq = downloads[task_id].get("seq") if task_id in downloads else None
+        filename = _sanitize_filename(title, "mp4", seq=seq)
         filepath = os.path.join(dl_dir, filename)
 
         with download_lock:
@@ -1354,11 +1364,14 @@ def _get_ytdlp_cookie_args():
         return ["--cookies", str(cookie_file)]
     return ["--cookies-from-browser", "chrome"]
 
-def build_ytdlp_cmd(url, cfg):
+def build_ytdlp_cmd(url, cfg, seq=None):
     dl_dir = cfg.get("download_dir", DEFAULT_CONFIG["download_dir"])
     quality = cfg.get("quality", "1080")
     fmt = cfg.get("format", "mp4")
     tmpl = cfg.get("filename_template", DEFAULT_CONFIG["filename_template"])
+    if seq is not None:
+        # Prefix template with sequence number: "01. %(title)s.%(ext)s"
+        tmpl = f"{seq:02d}. {tmpl}"
     os.makedirs(dl_dir, exist_ok=True)
     cmd = [
         sys.executable, "-m", "yt_dlp",
@@ -1394,7 +1407,9 @@ def download_worker(task_id, url, cfg):
             downloads[task_id]["status"] = "downloading"
             downloads[task_id]["title"] = get_video_title(url)
 
-        cmd = build_ytdlp_cmd(url, cfg)
+        with download_lock:
+            seq = downloads[task_id].get("seq") if task_id in downloads else None
+        cmd = build_ytdlp_cmd(url, cfg, seq=seq)
         process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
 
         with download_lock:
@@ -1508,12 +1523,13 @@ def start_download():
     if active + len(expanded_urls) > MAX_QUEUE_SIZE:
         return jsonify({"error": f"Queue full (max {MAX_QUEUE_SIZE} active)"}), 429
     task_ids = []
-    for url in expanded_urls:
+    for idx, url in enumerate(expanded_urls, start=1):
         task_id = str(uuid.uuid4())[:8]
         source = "premium" if is_premium_url(url) else "ytdlp"
+        seq = idx  # sequence number based on paste order
         with download_lock:
             downloads[task_id] = dict(status="queued", progress=0, title="Fetching...",
-                                      url=url, source=source, error=None, filename="", speed="", eta="", done_at=0)
+                                      url=url, source=source, error=None, filename="", speed="", eta="", done_at=0, seq=seq)
         worker = premium_download_worker if source == "premium" else download_worker
         threading.Thread(target=worker, args=(task_id, url, cfg), daemon=True).start()
         task_ids.append(task_id)
