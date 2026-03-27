@@ -899,12 +899,18 @@ def _title_from_url(url):
         pass
     return None
 
-def _download_with_progress(session, download_url, filepath, task_id, referer=None):
+def _download_with_progress(session, download_url, filepath, task_id, referer=None, extra_headers=None):
     """Stream download a file with progress updates."""
-    headers = {}
+    headers = {
+        "Accept": "video/mp4,video/*,*/*",
+        "Accept-Language": "en-US,en;q=0.9",
+    }
     if referer:
         headers["Referer"] = referer
-    resp = session.get(download_url, stream=True, headers=headers, timeout=120)
+        headers["Origin"] = referer.split("/")[0] + "//" + referer.split("/")[2]
+    if extra_headers:
+        headers.update(extra_headers)
+    resp = session.get(download_url, stream=True, headers=headers, timeout=120, allow_redirects=True)
     resp.raise_for_status()
     total = int(resp.headers.get("content-length", 0))
     downloaded = 0
@@ -1209,7 +1215,20 @@ def premium_download_worker(task_id, url, cfg):
             if task_id in downloads:
                 downloads[task_id]["filename"] = filename
 
-        _download_with_progress(session, download_url, filepath, task_id, referer=url)
+        # DVIDSHUB needs Referer from dvidshub.net for download to work
+        referer = url
+        extra_headers = None
+        if site_type == "dvidshub":
+            video_id_m = re.search(r'/video/(\d+)', url)
+            referer = f"https://www.dvidshub.net/download/popup/{video_id_m.group(1)}" if video_id_m else url
+            extra_headers = {
+                "Sec-Fetch-Dest": "document",
+                "Sec-Fetch-Mode": "navigate",
+                "Sec-Fetch-Site": "same-origin",
+                "Upgrade-Insecure-Requests": "1",
+            }
+
+        _download_with_progress(session, download_url, filepath, task_id, referer=referer, extra_headers=extra_headers)
 
         with download_lock:
             if task_id in downloads:

@@ -336,18 +336,30 @@
         </div>
       </div>
 
-      <!-- Per-site status (read-only) -->
+      <!-- Per-site status + individual import -->
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px" id="cookieSiteGrid">
         <div class="cookie-card" style="padding:10px 12px;margin:0">
-          <span class="cookie-site-label" style="font-size:12px"><span class="source-badge envato" style="margin:0">Envato</span></span>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span class="cookie-site-label" style="font-size:12px"><span class="source-badge envato" style="margin:0">Envato</span></span>
+            <label class="btn-cookie-paste" for="cookieFileSiteEnvato" style="padding:2px 8px;font-size:10px;cursor:pointer">+ Import</label>
+            <input type="file" id="cookieFileSiteEnvato" accept=".json,.txt" style="display:none" onchange="uploadCookieFile('envato', this)">
+          </div>
           <span class="cookie-status" id="cookieStatusEnvato" style="font-size:10px;margin-top:4px;display:block">No cookies</span>
         </div>
         <div class="cookie-card" style="padding:10px 12px;margin:0">
-          <span class="cookie-site-label" style="font-size:12px"><span class="source-badge storyblocks" style="margin:0">Storyblocks</span></span>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span class="cookie-site-label" style="font-size:12px"><span class="source-badge storyblocks" style="margin:0">Storyblocks</span></span>
+            <label class="btn-cookie-paste" for="cookieFileSiteStoryblocks" style="padding:2px 8px;font-size:10px;cursor:pointer">+ Import</label>
+            <input type="file" id="cookieFileSiteStoryblocks" accept=".json,.txt" style="display:none" onchange="uploadCookieFile('storyblocks', this)">
+          </div>
           <span class="cookie-status" id="cookieStatusStoryblocks" style="font-size:10px;margin-top:4px;display:block">No cookies</span>
         </div>
         <div class="cookie-card" style="padding:10px 12px;margin:0">
-          <span class="cookie-site-label" style="font-size:12px"><span class="source-badge dvidshub" style="margin:0">DVIDSHUB</span></span>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span class="cookie-site-label" style="font-size:12px"><span class="source-badge dvidshub" style="margin:0">DVIDSHUB</span></span>
+            <label class="btn-cookie-paste" for="cookieFileSiteDvidshub" style="padding:2px 8px;font-size:10px;cursor:pointer">+ Import</label>
+            <input type="file" id="cookieFileSiteDvidshub" accept=".json,.txt" style="display:none" onchange="uploadCookieFile('dvidshub', this)">
+          </div>
           <span class="cookie-status" id="cookieStatusDvidshub" style="font-size:10px;margin-top:4px;display:block">No cookies</span>
         </div>
         <div class="cookie-card" style="padding:10px 12px;margin:0">
@@ -613,6 +625,27 @@ function togglePasteBox(site) {
   const key = site.charAt(0).toUpperCase() + site.slice(1);
   const box = document.getElementById(`cookiePaste${key}`);
   box.style.display = box.style.display === 'none' ? 'block' : 'none';
+}
+
+async function uploadCookieFile(site, input) {
+  const file = input.files[0];
+  if (!file) return;
+  try {
+    const text = await file.text();
+    const data = JSON.parse(text);
+    const cookies = Array.isArray(data) ? data : data.cookies || data;
+    const res = await fetch(`${API}/api/cookies/import/${site}`, {
+      method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ cookies })
+    });
+    const result = await res.json();
+    if (result.error) { toast(result.error, 'error'); return; }
+    toast(result.message);
+    loadCookieStatus();
+  } catch (e) {
+    toast(`Invalid JSON file: ${e.message}`, 'error');
+  }
+  input.value = '';
 }
 
 async function uploadAllCookies(input) {
