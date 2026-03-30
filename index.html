@@ -4,287 +4,303 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>VidGrab — Video Downloader</title>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@300;400;500;600;700&subset=latin,latin-ext,vietnamese&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&subset=latin,latin-ext,vietnamese&display=swap" rel="stylesheet">
 <style>
   :root {
-    --bg: #0f1117;
-    --surface: #1a1d27;
-    --surface2: #232733;
-    --border: #2e3345;
-    --text: #e4e6ef;
-    --text2: #8b90a5;
-    --accent: #6c5ce7;
-    --accent2: #a29bfe;
-    --green: #00d2a0;
-    --red: #ff6b6b;
-    --orange: #ffa94d;
-    --radius-sm: 6px;
-    --radius: 10px;
-    --radius-lg: 14px;
+    --bg: #05080f;
+    --bg2: #080d18;
+    --glass: rgba(255,255,255,0.035);
+    --glass-border: rgba(255,255,255,0.08);
+    --glass-hover: rgba(255,255,255,0.06);
+    --text: #f0f2ff;
+    --text2: #6b7499;
+    --text3: #9ba3c9;
+    --accent: #4f8ef7;
+    --accent2: #7c6fff;
+    --cyan: #00d4ff;
+    --green: #10d9a0;
+    --red: #f54b6a;
+    --orange: #ff9f43;
+    --r: 12px;
+    --r-lg: 18px;
+    --r-xl: 24px;
   }
 
   * { margin: 0; padding: 0; box-sizing: border-box; }
+  ::selection { background: rgba(79,142,247,0.3); color: #fff; }
 
-  ::selection { background: var(--accent); color: #fff; }
-
-  ::-webkit-scrollbar { width: 8px; }
-  ::-webkit-scrollbar-track { background: var(--bg); }
-  ::-webkit-scrollbar-thumb { background: var(--surface2); border-radius: 4px; }
-  ::-webkit-scrollbar-thumb:hover { background: var(--border); }
+  ::-webkit-scrollbar { width: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 3px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
 
   body {
-    font-family: 'Outfit', sans-serif;
+    font-family: 'Inter', sans-serif;
     background: var(--bg);
     color: var(--text);
     min-height: 100vh;
     overflow-x: hidden;
   }
 
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 0; pointer-events: none;
+    background:
+      radial-gradient(ellipse 80% 60% at 10% -10%, rgba(79,142,247,0.12) 0%, transparent 60%),
+      radial-gradient(ellipse 60% 50% at 90% 20%, rgba(124,111,255,0.10) 0%, transparent 60%),
+      radial-gradient(ellipse 50% 40% at 50% 110%, rgba(0,212,255,0.06) 0%, transparent 60%);
+  }
+
+  /* ── Header ── */
   .header {
+    position: sticky; top: 0; z-index: 50;
     display: flex; align-items: center; justify-content: space-between;
-    padding: 20px 32px;
-    border-bottom: 1px solid var(--border);
-    background: var(--surface);
+    padding: 0 32px; height: 62px;
+    background: rgba(5,8,15,0.85);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--glass-border);
   }
-  .logo { display: flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 700; letter-spacing: -0.5px; }
-  .logo-icon {
-    width: 38px; height: 38px;
+
+  .logo { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 700; letter-spacing: -0.3px; }
+  .logo-mark {
+    width: 34px; height: 34px; border-radius: 10px;
     background: linear-gradient(135deg, var(--accent), var(--accent2));
-    border-radius: var(--radius); display: flex; align-items: center; justify-content: center; font-size: 20px;
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 20px rgba(79,142,247,0.35);
   }
-  .header-actions { display: flex; gap: 8px; }
-  .btn-icon {
-    width: 44px; height: 44px;
-    border: 1px solid var(--border); background: var(--surface2); color: var(--text2);
-    border-radius: var(--radius); cursor: pointer;
-    display: flex; align-items: center; justify-content: center; font-size: 18px; transition: all 0.2s;
+  .logo-mark svg { width: 15px; height: 15px; fill: #fff; }
+  .logo-dot { color: var(--accent); }
+
+  .header-right { display: flex; gap: 6px; }
+  .hbtn {
+    width: 38px; height: 38px; border-radius: 10px;
+    background: var(--glass); border: 1px solid var(--glass-border);
+    color: var(--text2); cursor: pointer; font-size: 16px;
+    display: flex; align-items: center; justify-content: center; transition: all 0.2s;
   }
-  .btn-icon:hover { border-color: var(--accent); color: var(--accent2); }
-  .btn-icon:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
+  .hbtn:hover { background: var(--glass-hover); color: var(--text); border-color: rgba(255,255,255,0.14); }
+  .hbtn svg { width: 16px; height: 16px; stroke: currentColor; fill: none; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 
-  .main { max-width: 820px; margin: 0 auto; padding: 32px 24px; }
+  /* ── Main ── */
+  .main { position: relative; z-index: 1; max-width: 860px; margin: 0 auto; padding: 36px 24px 80px; }
 
+  /* ── Deps banner ── */
+  .deps-banner {
+    display: none; padding: 13px 18px; margin-bottom: 20px;
+    background: rgba(245,75,106,0.08); border: 1px solid rgba(245,75,106,0.2);
+    border-radius: var(--r); font-size: 13px; color: var(--red); line-height: 1.5;
+  }
+  .deps-banner code { background: rgba(245,75,106,0.12); padding: 1px 7px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+
+  /* ── Input card ── */
   .input-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius-lg); padding: 24px; margin-bottom: 24px;
+    background: var(--glass); border: 1px solid var(--glass-border);
+    border-radius: var(--r-xl); padding: 24px;
+    backdrop-filter: blur(12px); margin-bottom: 20px; transition: border-color 0.3s;
   }
-  .input-card label {
-    display: block; font-size: 13px; font-weight: 500; color: var(--text2);
-    margin-bottom: 10px; text-transform: uppercase; letter-spacing: 0.8px;
+  .input-card:focus-within { border-color: rgba(79,142,247,0.28); box-shadow: 0 0 0 1px rgba(79,142,247,0.08), 0 8px 32px rgba(0,0,0,0.25); }
+
+  .input-label {
+    display: flex; align-items: center; gap: 8px;
+    font-size: 11px; font-weight: 600; color: var(--text2);
+    text-transform: uppercase; letter-spacing: 1px; margin-bottom: 12px;
   }
+  .input-label-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+
   .url-input {
-    width: 100%; min-height: 100px;
-    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    width: 100%; min-height: 110px; background: transparent; border: none;
     color: var(--text); font-family: 'JetBrains Mono', monospace;
-    font-size: 14px; padding: 14px 16px; resize: vertical; line-height: 1.7; transition: border-color 0.2s;
+    font-size: 13px; padding: 0; resize: vertical; line-height: 1.8; outline: none;
   }
-  .url-input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(108,92,231,0.15); }
-  .url-input::placeholder { color: #4a4f65; }
+  .url-input::placeholder { color: rgba(107,116,153,0.55); }
 
-  .input-footer { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; gap: 12px; }
-  .url-count { font-size: 13px; color: var(--text2); font-family: 'JetBrains Mono', monospace; min-height: 20px; }
-  .url-count .detected { color: var(--green); font-weight: 600; }
-  .url-count .fixed { color: var(--accent2); }
-  .url-count .skipped { color: var(--orange); }
-  .btn-download {
-    padding: 12px 32px;
-    background: linear-gradient(135deg, var(--accent), #7c5cf5); color: #fff; border: none;
-    border-radius: var(--radius); font-family: 'Outfit', sans-serif; font-size: 15px; font-weight: 600;
-    cursor: pointer; transition: all 0.2s; letter-spacing: 0.3px;
-  }
-  .btn-download:hover { transform: translateY(-1px); box-shadow: 0 6px 24px rgba(108,92,231,0.35); }
-  .btn-download:active { transform: translateY(0); }
-  .btn-download:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
-  .btn-download:focus-visible { outline: 2px solid var(--accent2); outline-offset: 2px; }
+  .input-divider { height: 1px; background: var(--glass-border); margin: 16px 0; }
+  .input-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
 
-  .quick-opts { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+  .url-stats { font-size: 12px; color: var(--text2); font-family: 'JetBrains Mono', monospace; margin-bottom: 10px; min-height: 18px; }
+  .url-stats .detected { color: var(--cyan); font-weight: 600; }
+  .url-stats .fixed { color: var(--accent2); }
+  .url-stats .skipped { color: var(--orange); }
+
+  .chips { display: flex; gap: 4px; flex-wrap: wrap; }
   .chip {
-    padding: 6px 14px; background: var(--surface2); border: 1px solid var(--border);
-    border-radius: 20px; font-size: 13px; color: var(--text2); cursor: pointer; transition: all 0.2s;
+    padding: 5px 13px; border-radius: 20px; font-size: 12px; font-weight: 500;
+    background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.08);
+    color: var(--text2); cursor: pointer; transition: all 0.15s; user-select: none;
   }
-  .chip:hover { border-color: var(--accent); color: var(--text); }
-  .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .chip:hover { border-color: rgba(79,142,247,0.4); color: var(--text); }
+  .chip.active { background: rgba(79,142,247,0.14); border-color: rgba(79,142,247,0.45); color: var(--accent); font-weight: 600; }
 
-  .queue-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
-  .queue-header h3 { font-size: 16px; font-weight: 600; }
-  .btn-clear {
-    padding: 6px 14px; background: transparent; border: 1px solid var(--border);
-    border-radius: var(--radius-sm); color: var(--text2); font-size: 12px; cursor: pointer;
-    font-family: 'Outfit', sans-serif; transition: all 0.2s;
+  .btn-download {
+    padding: 10px 28px; border-radius: var(--r);
+    background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+    color: #fff; border: none; font-family: 'Inter', sans-serif;
+    font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s;
+    box-shadow: 0 4px 20px rgba(79,142,247,0.32); white-space: nowrap; letter-spacing: 0.2px;
   }
+  .btn-download:hover { transform: translateY(-1px); box-shadow: 0 6px 28px rgba(79,142,247,0.48); }
+  .btn-download:active { transform: translateY(0); }
+  .btn-download:disabled { opacity: 0.42; cursor: not-allowed; transform: none; box-shadow: none; }
+
+  /* ── Queue ── */
+  .queue-header { display: none; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+  .queue-title { font-size: 12px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.8px; display: flex; align-items: center; gap: 8px; }
+  .queue-count { display: inline-flex; align-items: center; justify-content: center; min-width: 20px; height: 20px; padding: 0 6px; background: rgba(79,142,247,0.15); color: var(--accent); border-radius: 10px; font-size: 11px; font-weight: 700; }
+  .btn-clear { padding: 5px 12px; background: transparent; border: 1px solid var(--glass-border); border-radius: 8px; color: var(--text2); font-size: 12px; font-family: 'Inter', sans-serif; cursor: pointer; transition: all 0.15s; }
   .btn-clear:hover { border-color: var(--red); color: var(--red); }
 
-  .queue { display: flex; flex-direction: column; gap: 8px; }
+  .queue { display: flex; flex-direction: column; gap: 6px; }
 
+  /* ── Task card ── */
   .task-card {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius); padding: 16px 20px;
-    display: flex; align-items: center; gap: 16px;
-    transition: all 0.3s; animation: slideIn 0.3s ease;
+    background: var(--glass); border: 1px solid var(--glass-border);
+    border-radius: var(--r-lg); padding: 13px 16px 13px 20px;
+    display: flex; align-items: center; gap: 14px;
+    backdrop-filter: blur(8px); transition: border-color 0.2s;
+    animation: slideDown 0.22s cubic-bezier(0.4,0,0.2,1);
+    position: relative; overflow: hidden;
   }
-  @keyframes slideIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
-
-  .task-status-icon {
-    width: 36px; height: 36px; border-radius: var(--radius);
-    display: flex; align-items: center; justify-content: center; font-size: 16px; flex-shrink: 0;
+  .task-card::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; border-radius: 3px 0 0 3px;
   }
-  .task-status-icon.queued { background: #2e3345; color: var(--text2); }
-  .task-status-icon.downloading { background: rgba(108,92,231,0.15); color: var(--accent2); }
-  .task-status-icon.done { background: rgba(0,210,160,0.12); color: var(--green); }
-  .task-status-icon.error { background: rgba(255,107,107,0.12); color: var(--red); }
+  .task-card.st-downloading::before { background: linear-gradient(180deg, var(--accent), var(--accent2)); }
+  .task-card.st-done::before { background: var(--green); }
+  .task-card.st-error::before { background: var(--red); }
+  .task-card.st-queued::before { background: rgba(255,255,255,0.15); }
+  .task-card:hover { border-color: rgba(255,255,255,0.12); }
+  @keyframes slideDown { from { opacity: 0; transform: translateY(-5px); } to { opacity: 1; transform: translateY(0); } }
 
-  .task-info { flex: 1; min-width: 0; }
-  .task-title {
-    font-size: 14px; font-weight: 500;
-    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 4px;
-  }
-  .task-meta { font-size: 12px; color: var(--text2); font-family: 'JetBrains Mono', monospace; display: flex; gap: 12px; align-items: center; }
+  .task-icon { width: 34px; height: 34px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 14px; flex-shrink: 0; }
+  .task-icon.queued { background: rgba(107,116,153,0.1); }
+  .task-icon.downloading { background: rgba(79,142,247,0.12); }
+  .task-icon.done { background: rgba(16,217,160,0.12); }
+  .task-icon.error { background: rgba(245,75,106,0.12); }
 
-  .task-cancel {
-    background: none; border: none; color: var(--text2); cursor: pointer; font-size: 14px;
-    padding: 2px 6px; border-radius: 4px; transition: all 0.15s;
-  }
-  .task-cancel:hover { color: var(--red); background: rgba(255,107,107,0.1); }
+  .task-body { flex: 1; min-width: 0; }
+  .task-name { font-size: 13px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 3px; display: flex; align-items: center; gap: 6px; }
+  .task-sub { font-size: 11px; color: var(--text2); font-family: 'JetBrains Mono', monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
-  .progress-bar { width: 120px; height: 6px; background: var(--bg); border-radius: 3px; overflow: hidden; flex-shrink: 0; }
-  .progress-fill { height: 100%; background: linear-gradient(90deg, var(--accent), var(--accent2)); border-radius: 3px; transition: width 0.4s ease; }
+  .task-right { display: flex; align-items: center; gap: 8px; flex-shrink: 0; }
+
+  .progress-bar { width: 90px; height: 3px; background: rgba(255,255,255,0.07); border-radius: 2px; overflow: hidden; }
+  .progress-fill { height: 100%; border-radius: 2px; background: linear-gradient(90deg, var(--accent), var(--cyan)); transition: width 0.5s ease; }
   .progress-fill.done { background: var(--green); }
   .progress-fill.error { background: var(--red); }
+  .progress-pct { font-size: 12px; font-family: 'JetBrains Mono', monospace; font-weight: 600; width: 38px; text-align: right; color: var(--text3); }
+  .progress-pct.done { color: var(--green); }
+  .progress-pct.error { color: var(--red); }
 
-  .progress-pct { font-size: 13px; font-family: 'JetBrains Mono', monospace; font-weight: 600; width: 48px; text-align: right; flex-shrink: 0; }
+  .btn-cancel { background: none; border: none; color: var(--text2); cursor: pointer; width: 26px; height: 26px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 11px; transition: all 0.15s; flex-shrink: 0; }
+  .btn-cancel:hover { color: var(--red); background: rgba(245,75,106,0.1); }
 
-  .empty-state { text-align: center; padding: 48px 20px; color: var(--text2); }
-  .empty-state .icon { font-size: 40px; margin-bottom: 12px; opacity: 0.4; }
-  .empty-state p { font-size: 14px; }
+  .badge { display: inline-flex; align-items: center; padding: 2px 7px; border-radius: 5px; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; white-space: nowrap; flex-shrink: 0; }
+  .badge-yt { background: rgba(255,50,50,0.1); color: #ff5252; border: 1px solid rgba(255,50,50,0.18); }
+  .badge-envato { background: rgba(130,209,72,0.1); color: #82d148; border: 1px solid rgba(130,209,72,0.18); }
+  .badge-sb { background: rgba(0,180,255,0.1); color: #00b4ff; border: 1px solid rgba(0,180,255,0.18); }
+  .badge-dv { background: rgba(255,193,7,0.1); color: #ffc107; border: 1px solid rgba(255,193,7,0.18); }
 
-  .source-badge {
-    display: inline-block; padding: 2px 7px; border-radius: 4px;
-    font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;
-    vertical-align: middle; margin-left: 6px;
-  }
-  .source-badge.envato { background: rgba(130,209,72,0.15); color: #82d148; }
-  .source-badge.storyblocks { background: rgba(0,180,255,0.15); color: #00b4ff; }
-  .source-badge.youtube { background: rgba(255,0,0,0.12); color: #ff4444; }
-  .source-badge.dvidshub { background: rgba(255,193,7,0.15); color: #ffc107; }
+  /* ── Empty state ── */
+  .empty-state { display: flex; flex-direction: column; align-items: center; padding: 56px 20px; color: var(--text2); text-align: center; }
+  .empty-icon { width: 60px; height: 60px; border-radius: 18px; margin-bottom: 16px; background: var(--glass); border: 1px solid var(--glass-border); display: flex; align-items: center; justify-content: center; font-size: 26px; }
+  .empty-title { font-size: 15px; font-weight: 600; color: var(--text3); margin-bottom: 5px; }
+  .empty-sub { font-size: 13px; }
 
-  .cookie-card {
-    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
-    padding: 14px 16px; margin-bottom: 12px;
-  }
-  .cookie-card-header {
-    display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px;
-  }
-  .cookie-site-label { font-size: 13px; font-weight: 500; display: flex; align-items: center; gap: 8px; }
-  .cookie-status {
-    font-size: 11px; font-family: 'JetBrains Mono', monospace; color: var(--text2);
-    padding: 2px 8px; background: var(--surface2); border-radius: 4px;
-  }
-  .cookie-status.active { color: var(--green); background: rgba(0,210,160,0.1); }
-  .cookie-card-actions { display: flex; gap: 6px; flex-wrap: wrap; }
-  .btn-cookie-import, .btn-cookie-paste, .btn-cookie-delete, .btn-cookie-save {
-    padding: 5px 12px; border-radius: var(--radius-sm); font-size: 12px;
-    font-family: 'Outfit', sans-serif; cursor: pointer; transition: all 0.2s; border: 1px solid var(--border);
-    background: var(--surface2); color: var(--text2);
-  }
-  .btn-cookie-import { display: inline-block; text-align: center; }
-  .btn-cookie-import:hover, .btn-cookie-paste:hover { border-color: var(--accent); color: var(--accent2); }
-  .btn-cookie-delete { border-color: transparent; color: var(--red); background: rgba(255,107,107,0.08); }
-  .btn-cookie-delete:hover { background: rgba(255,107,107,0.18); }
-  .btn-cookie-save {
-    background: var(--accent); border-color: var(--accent); color: #fff; margin-top: 8px; width: 100%;
-    padding: 8px; font-weight: 500;
-  }
-  .btn-cookie-save:hover { background: #7c5cf5; }
-  .cookie-paste-box { margin-top: 10px; }
-  .cookie-paste-input {
-    width: 100%; min-height: 80px; max-height: 200px;
-    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-sm);
-    color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 11px;
-    padding: 10px; resize: vertical; line-height: 1.5;
-  }
-  .cookie-paste-input:focus { outline: none; border-color: var(--accent); }
-  .cookie-paste-input::placeholder { color: #4a4f65; }
+  /* ── Settings overlay ── */
+  .settings-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 100; backdrop-filter: blur(8px); align-items: center; justify-content: center; }
+  .settings-overlay.open { display: flex; }
+  .settings-panel { background: #0c1020; border: 1px solid var(--glass-border); border-radius: var(--r-xl); width: 500px; max-width: 94vw; max-height: 88vh; overflow-y: auto; padding: 30px; animation: fadeUp 0.22s cubic-bezier(0.4,0,0.2,1); box-shadow: 0 24px 80px rgba(0,0,0,0.6); }
+  @keyframes fadeUp { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
 
-  .settings-overlay {
-    display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.6);
-    z-index: 100; backdrop-filter: blur(4px);
-  }
-  .settings-overlay.open { display: flex; align-items: center; justify-content: center; }
-  .settings-panel {
-    background: var(--surface); border: 1px solid var(--border);
-    border-radius: var(--radius-lg); width: 460px; max-width: 92vw; max-height: 85vh;
-    overflow-y: auto; padding: 28px; animation: fadeUp 0.25s ease;
-  }
-  @keyframes fadeUp { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
+  .panel-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 26px; }
+  .panel-title { font-size: 18px; font-weight: 700; }
+  .panel-close { width: 32px; height: 32px; border-radius: 9px; background: var(--glass); border: 1px solid var(--glass-border); color: var(--text2); cursor: pointer; font-size: 15px; display: flex; align-items: center; justify-content: center; transition: all 0.15s; }
+  .panel-close:hover { color: var(--red); border-color: rgba(245,75,106,0.3); }
 
-  .settings-panel h2 { font-size: 20px; font-weight: 700; margin-bottom: 24px; display: flex; align-items: center; justify-content: space-between; }
-  .settings-panel h2 .close-btn {
-    width: 32px; height: 32px; border: none; background: var(--surface2); color: var(--text2);
-    border-radius: var(--radius); cursor: pointer; font-size: 18px; display: flex; align-items: center; justify-content: center;
-  }
-  .settings-panel h2 .close-btn:hover { color: var(--red); }
-
-  .field { margin-bottom: 20px; }
-  .field label { display: block; font-size: 13px; font-weight: 500; color: var(--text2); margin-bottom: 8px; }
-  .field input, .field select {
-    width: 100%; padding: 10px 14px; background: var(--bg); border: 1px solid var(--border);
-    border-radius: var(--radius); color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 13px;
-  }
-  .field input:focus, .field select:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(108,92,231,0.15); }
+  .field { margin-bottom: 16px; }
+  .field label { display: block; font-size: 11px; font-weight: 600; color: var(--text2); text-transform: uppercase; letter-spacing: 0.7px; margin-bottom: 7px; }
+  .field input, .field select { width: 100%; padding: 10px 13px; background: rgba(255,255,255,0.04); border: 1px solid var(--glass-border); border-radius: var(--r); color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 13px; transition: border-color 0.2s, box-shadow 0.2s; }
+  .field input:focus, .field select:focus { outline: none; border-color: rgba(79,142,247,0.45); box-shadow: 0 0 0 3px rgba(79,142,247,0.1); }
   .field select { cursor: pointer; }
-  .field select option { background: var(--surface); }
+  .field select option { background: #0c1020; }
 
-  .btn-save {
-    width: 100%; padding: 12px; background: var(--accent); color: #fff; border: none;
-    border-radius: var(--radius); font-family: 'Outfit', sans-serif; font-size: 15px; font-weight: 600;
-    cursor: pointer; transition: all 0.2s;
-  }
-  .btn-save:hover { background: #7c5cf5; }
+  .section-divider { height: 1px; background: var(--glass-border); margin: 22px 0; }
+  .section-label { font-size: 14px; font-weight: 700; color: var(--text); margin-bottom: 5px; }
+  .section-desc { font-size: 12px; color: var(--text2); line-height: 1.65; margin-bottom: 14px; }
 
-  .deps-banner {
-    background: rgba(255,107,107,0.1); border: 1px solid rgba(255,107,107,0.25);
-    border-radius: var(--radius); padding: 16px 20px; margin-bottom: 24px; font-size: 13px; color: var(--red); display: none;
-  }
-  .deps-banner code { background: rgba(255,107,107,0.15); padding: 2px 8px; border-radius: 4px; font-family: 'JetBrains Mono', monospace; font-size: 12px; }
+  .btn-save { width: 100%; padding: 12px; margin-top: 6px; background: linear-gradient(135deg, var(--accent), var(--accent2)); color: #fff; border: none; border-radius: var(--r); font-family: 'Inter', sans-serif; font-size: 14px; font-weight: 600; cursor: pointer; transition: all 0.2s; box-shadow: 0 4px 16px rgba(79,142,247,0.28); }
+  .btn-save:hover { box-shadow: 0 6px 24px rgba(79,142,247,0.42); transform: translateY(-1px); }
 
-  .toast {
-    position: fixed; bottom: 24px; right: 24px; padding: 12px 20px;
-    background: var(--surface2); border: 1px solid var(--border); border-radius: var(--radius);
-    font-size: 14px; color: var(--text); z-index: 200; animation: fadeUp 0.25s ease; display: none;
-  }
+  .cookie-main-card { background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border); border-radius: var(--r); padding: 14px; margin-bottom: 10px; }
+  .cookie-actions { display: flex; gap: 6px; }
+  .btn-ci, .btn-cp, .btn-cd { flex: 1; padding: 8px 12px; border-radius: 8px; font-size: 12px; font-weight: 500; font-family: 'Inter', sans-serif; cursor: pointer; transition: all 0.15s; border: 1px solid var(--glass-border); background: rgba(255,255,255,0.04); color: var(--text2); text-align: center; }
+  .btn-ci:hover, .btn-cp:hover { border-color: rgba(79,142,247,0.35); color: var(--accent); }
+  .btn-cd { color: var(--red); background: rgba(245,75,106,0.06); border-color: rgba(245,75,106,0.2); }
+  .btn-cd:hover { background: rgba(245,75,106,0.12); }
+
+  .cookie-paste-box { margin-top: 10px; display: none; }
+  .cookie-paste-input { width: 100%; min-height: 80px; max-height: 180px; background: rgba(255,255,255,0.03); border: 1px solid var(--glass-border); border-radius: 8px; color: var(--text); font-family: 'JetBrains Mono', monospace; font-size: 11px; padding: 10px; resize: vertical; line-height: 1.5; }
+  .cookie-paste-input:focus { outline: none; border-color: rgba(79,142,247,0.4); }
+  .cookie-paste-input::placeholder { color: rgba(107,116,153,0.45); }
+  .btn-cp-save { width: 100%; margin-top: 8px; padding: 9px; background: rgba(79,142,247,0.1); border: 1px solid rgba(79,142,247,0.22); border-radius: 8px; color: var(--accent); font-size: 13px; font-weight: 600; font-family: 'Inter', sans-serif; cursor: pointer; transition: all 0.15s; }
+  .btn-cp-save:hover { background: rgba(79,142,247,0.18); }
+
+  .site-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
+  .site-card { background: rgba(255,255,255,0.025); border: 1px solid var(--glass-border); border-radius: 10px; padding: 10px 12px; }
+  .site-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+  .cookie-status { font-size: 10px; font-family: 'JetBrains Mono', monospace; color: var(--text2); padding: 2px 7px; background: rgba(255,255,255,0.04); border-radius: 4px; display: block; margin-top: 4px; }
+  .cookie-status.active { color: var(--green); background: rgba(16,217,160,0.08); }
+  .btn-si { font-size: 10px; padding: 2px 8px; border-radius: 5px; background: rgba(79,142,247,0.08); border: 1px solid rgba(79,142,247,0.18); color: var(--accent); font-family: 'Inter', sans-serif; cursor: pointer; transition: all 0.15s; }
+  .btn-si:hover { background: rgba(79,142,247,0.15); }
+
+  /* ── Toast ── */
+  .toast { position: fixed; bottom: 24px; right: 24px; z-index: 200; padding: 12px 18px; font-size: 13px; font-weight: 500; color: var(--text); background: #141824; border: 1px solid var(--glass-border); border-radius: var(--r); backdrop-filter: blur(12px); box-shadow: 0 8px 32px rgba(0,0,0,0.4); display: none; animation: fadeUp 0.2s ease; max-width: 320px; }
   .toast.show { display: block; }
 
+  /* ── Mobile ── */
   @media (max-width: 600px) {
-    .header { padding: 16px; }
-    .main { padding: 20px 14px; }
+    .header { padding: 0 16px; }
+    .main { padding: 22px 14px 60px; }
     .input-footer { flex-direction: column; align-items: stretch; }
-    .progress-bar { width: 80px; }
-    .url-input { font-size: 16px; } /* Prevents iOS auto-zoom */
-    .btn-icon { width: 44px; height: 44px; }
+    .btn-download { text-align: center; }
+    .progress-bar { width: 60px; }
+    .url-input { font-size: 16px; }
+    .site-grid { grid-template-columns: 1fr; }
   }
 </style>
 </head>
 <body>
 
-<div class="header">
-  <div class="logo"><div class="logo-icon">▶</div><span>VidGrab</span></div>
-  <div class="header-actions">
-    <button class="btn-icon" onclick="openFolder()" title="Open download folder" aria-label="Open download folder">📂</button>
-    <button class="btn-icon" onclick="openSettings()" title="Settings" aria-label="Settings">⚙️</button>
+<header class="header">
+  <div class="logo">
+    <div class="logo-mark">
+      <svg viewBox="0 0 24 24"><polygon points="5,3 19,12 5,21"/></svg>
+    </div>
+    Vid<span class="logo-dot">Grab</span>
   </div>
-</div>
+  <div class="header-right">
+    <button class="hbtn" onclick="openFolder()" title="Open download folder" aria-label="Open download folder">
+      <svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+    </button>
+    <button class="hbtn" onclick="openSettings()" title="Settings" aria-label="Settings">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+    </button>
+  </div>
+</header>
 
-<div class="main">
-  <div class="deps-banner" id="depsBanner">⚠️ Missing dependencies: <span id="depsMsg"></span></div>
+<main class="main">
+  <div class="deps-banner" id="depsBanner">
+    &#9888;&#65039; Missing: <span id="depsMsg"></span>
+  </div>
 
   <div class="input-card">
-    <label for="urlInput">Paste video URLs <span style="opacity:0.5">(one per line for bulk download)</span></label>
+    <div class="input-label"><span class="input-label-dot"></span>Paste Video URLs</div>
     <textarea class="url-input" id="urlInput"
-      placeholder="Paste anything — URLs tự detect:&#10;https://www.youtube.com/watch?v=...&#10;youtube.com/watch?v=... (auto-fix https)&#10;dQw4w9WgXcQ (YouTube ID)&#10;https://elements.envato.com/... (Envato — single video)&#10;https://www.storyblocks.com/video/... (Storyblocks — single)&#10;https://www.storyblocks.com/all-video/search/keyword (search → bulk download)&#10;https://www.dvidshub.net/video/... (DVIDSHUB — cookie auth)"></textarea>
+      placeholder="Paste anything — URLs auto-detect:&#10;https://www.youtube.com/watch?v=...&#10;youtube.com/watch?v=... (auto-fix https)&#10;dQw4w9WgXcQ (YouTube ID)&#10;https://elements.envato.com/... (Envato)&#10;https://www.storyblocks.com/video/... (Storyblocks)&#10;https://www.dvidshub.net/video/... (DVIDSHUB)"></textarea>
+    <div class="input-divider"></div>
     <div class="input-footer">
-      <div>
-        <span class="url-count" id="urlCount">0 URLs</span>
-        <div class="quick-opts" id="qualityChips">
+      <div style="flex:1">
+        <div class="url-stats" id="urlCount"><span style="opacity:0.35">0 URLs</span></div>
+        <div class="chips" id="qualityChips">
           <span class="chip" data-q="720">720p</span>
           <span class="chip active" data-q="1080">1080p</span>
           <span class="chip" data-q="1440">1440p</span>
@@ -292,85 +308,115 @@
           <span class="chip" data-q="mp3">MP3</span>
         </div>
       </div>
-      <button class="btn-download" id="btnDownload" onclick="startDownload()">⬇ Download</button>
+      <button class="btn-download" id="btnDownload" onclick="startDownload()">&#8595; Download</button>
     </div>
   </div>
 
-  <div class="queue-header" id="queueHeader" style="display:none">
-    <h3>Downloads</h3>
+  <div class="queue-header" id="queueHeader">
+    <div class="queue-title">Downloads <span class="queue-count" id="queueCount">0</span></div>
     <button class="btn-clear" onclick="clearDone()">Clear completed</button>
   </div>
   <div class="queue" id="queue"></div>
-  <div class="empty-state" id="emptyState"><div class="icon">📥</div><p>Paste URLs and hit Download to start</p></div>
-</div>
+  <div class="empty-state" id="emptyState">
+    <div class="empty-icon">&#8595;</div>
+    <div class="empty-title">No downloads yet</div>
+    <div class="empty-sub">Paste video URLs above and hit Download</div>
+  </div>
+</main>
 
-<div class="settings-overlay" id="settingsOverlay" onclick="closeSettingsOutside(event)">
+<!-- Settings -->
+<div class="settings-overlay" id="settingsOverlay" onclick="closeSettingsOutside(event)" role="dialog" aria-modal="true" aria-label="Settings">
   <div class="settings-panel">
-    <h2>Settings <button class="close-btn" onclick="closeSettings()" aria-label="Close settings">✕</button></h2>
-    <div class="field"><label>Default Quality</label>
-      <select id="cfgQuality"><option value="720">720p</option><option value="1080" selected>1080p</option><option value="1440">1440p (2K)</option><option value="2160">2160p (4K)</option></select></div>
+    <div class="panel-header">
+      <div class="panel-title">Settings</div>
+      <button class="panel-close" onclick="closeSettings()" aria-label="Close">&#10005;</button>
+    </div>
+
+    <div class="field"><label>Quality</label>
+      <select id="cfgQuality">
+        <option value="720">720p — HD</option>
+        <option value="1080" selected>1080p — Full HD</option>
+        <option value="1440">1440p — 2K</option>
+        <option value="2160">2160p — 4K</option>
+      </select></div>
+
     <div class="field"><label>Format</label>
-      <select id="cfgFormat"><option value="mp4">MP4 (Video)</option><option value="mkv">MKV (Video)</option><option value="mp3">MP3 (Audio only)</option></select></div>
-    <div class="field"><label>Download Folder</label><input type="text" id="cfgDir" placeholder="~/Downloads/VidGrab"></div>
-    <div class="field"><label>Filename Template</label><input type="text" id="cfgTemplate" placeholder="%(title)s.%(ext)s"></div>
+      <select id="cfgFormat">
+        <option value="mp4">MP4 (Video)</option>
+        <option value="mkv">MKV (Video)</option>
+        <option value="mp3">MP3 (Audio only)</option>
+      </select></div>
+
+    <div class="field"><label>Download Folder</label>
+      <input type="text" id="cfgDir" placeholder="~/Downloads/VidGrab"></div>
+
+    <div class="field"><label>Filename Template</label>
+      <input type="text" id="cfgTemplate" placeholder="%(title)s.%(ext)s"></div>
+
     <div class="field"><label>Concurrent Downloads</label>
-      <select id="cfgConcurrent"><option value="1">1</option><option value="2" selected>2</option><option value="3">3</option><option value="4">4</option></select></div>
-    <div style="border-top:1px solid var(--border); margin:20px 0 16px; padding-top:16px;">
-      <label style="display:block;font-size:14px;font-weight:600;color:var(--text);margin-bottom:8px;">Cookie Import (All Sites)</label>
-      <p style="font-size:12px;color:var(--text2);margin-bottom:16px;line-height:1.6;">
-        Import cookies <strong>once</strong> → auto-split to Envato, Storyblocks, DVIDSHUB & YouTube/yt-dlp.<br>
-        Use <strong>Cookie-Editor</strong> extension → Export as JSON (all cookies).
-      </p>
+      <select id="cfgConcurrent">
+        <option value="1">1 at a time</option>
+        <option value="2" selected>2 at a time</option>
+        <option value="3">3 at a time</option>
+        <option value="4">4 at a time</option>
+      </select></div>
 
-      <!-- Universal import card -->
-      <div class="cookie-card">
-        <div class="cookie-card-actions" style="margin-bottom:0">
-          <label class="btn-cookie-import" for="cookieFileAll" style="flex:1;text-align:center;padding:10px;font-size:13px;font-weight:600;background:var(--accent);border-color:var(--accent);color:#fff">📂 Import JSON (All Sites)</label>
-          <input type="file" id="cookieFileAll" accept=".json,.txt" style="display:none" onchange="uploadAllCookies(this)">
-          <button class="btn-cookie-paste" onclick="togglePasteBox('all')" style="flex:1;text-align:center;padding:10px">📋 Paste JSON</button>
-          <button class="btn-cookie-delete" onclick="deleteAllCookies()" id="btnDeleteAll" style="display:none;padding:10px">🗑 Delete All</button>
-        </div>
-        <div class="cookie-paste-box" id="cookiePasteAll" style="display:none">
-          <textarea class="cookie-paste-input" id="cookiePasteInputAll" placeholder='Paste ALL cookies JSON here (array from Cookie-Editor)...' style="min-height:100px"></textarea>
-          <button class="btn-cookie-save" onclick="saveAllPastedCookies()">Save & Split to All Sites</button>
-        </div>
+    <div class="section-divider"></div>
+    <div class="section-label">Cookie Import</div>
+    <div class="section-desc">Import cookies once &#8594; auto-split to all sites.<br>Use <strong>Cookie-Editor</strong> extension &#8594; Export as JSON.</div>
+
+    <div class="cookie-main-card">
+      <div class="cookie-actions">
+        <label class="btn-ci" for="cookieFileAll" style="cursor:pointer">&#8593; Import JSON</label>
+        <input type="file" id="cookieFileAll" accept=".json,.txt" style="display:none" onchange="uploadAllCookies(this)">
+        <button class="btn-cp" onclick="togglePasteBox('all')">&#128203; Paste JSON</button>
+        <button class="btn-cd" onclick="deleteAllCookies()" id="btnDeleteAll" style="display:none">&#128465; Delete All</button>
       </div>
-
-      <!-- Per-site status + individual import -->
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:10px" id="cookieSiteGrid">
-        <div class="cookie-card" style="padding:10px 12px;margin:0">
-          <div style="display:flex;align-items:center;justify-content:space-between">
-            <span class="cookie-site-label" style="font-size:12px"><span class="source-badge envato" style="margin:0">Envato</span></span>
-            <label class="btn-cookie-paste" for="cookieFileSiteEnvato" style="padding:2px 8px;font-size:10px;cursor:pointer">+ Import</label>
-            <input type="file" id="cookieFileSiteEnvato" accept=".json,.txt" style="display:none" onchange="uploadCookieFile('envato', this)">
-          </div>
-          <span class="cookie-status" id="cookieStatusEnvato" style="font-size:10px;margin-top:4px;display:block">No cookies</span>
-        </div>
-        <div class="cookie-card" style="padding:10px 12px;margin:0">
-          <div style="display:flex;align-items:center;justify-content:space-between">
-            <span class="cookie-site-label" style="font-size:12px"><span class="source-badge storyblocks" style="margin:0">Storyblocks</span></span>
-            <label class="btn-cookie-paste" for="cookieFileSiteStoryblocks" style="padding:2px 8px;font-size:10px;cursor:pointer">+ Import</label>
-            <input type="file" id="cookieFileSiteStoryblocks" accept=".json,.txt" style="display:none" onchange="uploadCookieFile('storyblocks', this)">
-          </div>
-          <span class="cookie-status" id="cookieStatusStoryblocks" style="font-size:10px;margin-top:4px;display:block">No cookies</span>
-        </div>
-        <div class="cookie-card" style="padding:10px 12px;margin:0">
-          <div style="display:flex;align-items:center;justify-content:space-between">
-            <span class="cookie-site-label" style="font-size:12px"><span class="source-badge dvidshub" style="margin:0">DVIDSHUB</span></span>
-            <label class="btn-cookie-paste" for="cookieFileSiteDvidshub" style="padding:2px 8px;font-size:10px;cursor:pointer">+ Import</label>
-            <input type="file" id="cookieFileSiteDvidshub" accept=".json,.txt" style="display:none" onchange="uploadCookieFile('dvidshub', this)">
-          </div>
-          <span class="cookie-status" id="cookieStatusDvidshub" style="font-size:10px;margin-top:4px;display:block">No cookies</span>
-        </div>
-        <div class="cookie-card" style="padding:10px 12px;margin:0">
-          <span class="cookie-site-label" style="font-size:12px"><span class="source-badge youtube" style="margin:0">YouTube</span> & others</span>
-          <span class="cookie-status" id="cookieStatusYtdlp" style="font-size:10px;margin-top:4px;display:block">No cookies</span>
-        </div>
+      <div class="cookie-paste-box" id="cookiePasteAll">
+        <textarea class="cookie-paste-input" id="cookiePasteInputAll" placeholder="Paste ALL cookies JSON array here..."></textarea>
+        <button class="btn-cp-save" onclick="saveAllPastedCookies()">Save &amp; Split to All Sites</button>
       </div>
     </div>
 
+    <div class="site-grid" id="cookieSiteGrid">
+      <div class="site-card">
+        <div class="site-row">
+          <span class="badge badge-envato">Envato</span>
+          <label class="btn-si" for="cookieFileSiteEnvato" style="cursor:pointer">+ Import</label>
+          <input type="file" id="cookieFileSiteEnvato" accept=".json,.txt" style="display:none" onchange="uploadCookieFile('envato', this)">
+        </div>
+        <span class="cookie-status" id="cookieStatusEnvato">No cookies</span>
+      </div>
+      <div class="site-card">
+        <div class="site-row">
+          <span class="badge badge-sb">Storyblocks</span>
+          <label class="btn-si" for="cookieFileSiteStoryblocks" style="cursor:pointer">+ Import</label>
+          <input type="file" id="cookieFileSiteStoryblocks" accept=".json,.txt" style="display:none" onchange="uploadCookieFile('storyblocks', this)">
+        </div>
+        <span class="cookie-status" id="cookieStatusStoryblocks">No cookies</span>
+      </div>
+      <div class="site-card">
+        <div class="site-row">
+          <span class="badge badge-dv">DVIDSHUB</span>
+          <label class="btn-si" for="cookieFileSiteDvidshub" style="cursor:pointer">+ Import</label>
+          <input type="file" id="cookieFileSiteDvidshub" accept=".json,.txt" style="display:none" onchange="uploadCookieFile('dvidshub', this)">
+        </div>
+        <span class="cookie-status" id="cookieStatusDvidshub">No cookies</span>
+      </div>
+      <div class="site-card">
+        <div class="site-row"><span class="badge badge-yt">YouTube</span></div>
+        <span class="cookie-status" id="cookieStatusYtdlp">No cookies</span>
+      </div>
+    </div>
+
+    <div class="section-divider"></div>
     <div class="field"><label>Cookie Browser (fallback)</label>
-      <select id="cfgCookieBrowser"><option value="chrome">Chrome</option><option value="firefox">Firefox</option><option value="safari">Safari</option></select></div>
+      <select id="cfgCookieBrowser">
+        <option value="chrome">Chrome</option>
+        <option value="firefox">Firefox</option>
+        <option value="safari">Safari</option>
+      </select></div>
+
     <button class="btn-save" onclick="saveSettings()">Save Settings</button>
   </div>
 </div>
@@ -384,26 +430,23 @@ let selectedQuality = '1080';
 let selectedFormat = 'mp4';
 const originalTitle = document.title;
 
-// ── Helpers ──
 function escHtml(s) {
   return s ? s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;') : '';
 }
 
-// ── Smart URL Parser (live preview) ──
+// ── Smart URL Parser ──
 let parseTimer = null;
 let lastParsedCount = 0;
 
 function parseUrlsLive() {
   const raw = urlInput.value;
   if (!raw.trim()) {
-    urlCount.innerHTML = '<span style="opacity:0.5">0 URLs</span>';
+    urlCount.innerHTML = '<span style="opacity:0.35">0 URLs</span>';
     lastParsedCount = 0;
     return;
   }
-  // Instant line count while waiting for server parse
   const lineCount = raw.split('\n').filter(u => u.trim()).length;
-  urlCount.innerHTML = `<span style="opacity:0.5">${lineCount} line${lineCount !== 1 ? 's' : ''} ...</span>`;
-
+  urlCount.innerHTML = `<span style="opacity:0.35">${lineCount} line${lineCount !== 1 ? 's' : ''} ...</span>`;
   clearTimeout(parseTimer);
   parseTimer = setTimeout(async () => {
     try {
@@ -414,9 +457,9 @@ function parseUrlsLive() {
       const { urls, stats } = await res.json();
       lastParsedCount = urls.length;
       let html = `<span class="detected">${urls.length}</span> URL${urls.length !== 1 ? 's' : ''} detected`;
-      if (stats.search_urls > 0) html += ` · <span class="fixed">${stats.search_urls} search page${stats.search_urls > 1 ? 's' : ''} (will expand)</span>`;
-      if (stats.fixed > 0) html += ` · <span class="fixed">${stats.fixed} auto-fixed</span>`;
-      if (stats.skipped > 0) html += ` · <span class="skipped">${stats.skipped} skipped</span>`;
+      if (stats.search_urls > 0) html += ` &middot; <span class="fixed">${stats.search_urls} search page${stats.search_urls > 1 ? 's' : ''} (will expand)</span>`;
+      if (stats.fixed > 0) html += ` &middot; <span class="fixed">${stats.fixed} auto-fixed</span>`;
+      if (stats.skipped > 0) html += ` &middot; <span class="skipped">${stats.skipped} skipped</span>`;
       urlCount.innerHTML = html;
     } catch (e) {
       urlCount.innerHTML = `${lineCount} line${lineCount !== 1 ? 's' : ''}`;
@@ -424,7 +467,6 @@ function parseUrlsLive() {
   }, 300);
 }
 
-// ── URL Input ──
 const urlInput = document.getElementById('urlInput');
 const urlCount = document.getElementById('urlCount');
 urlInput.addEventListener('input', parseUrlsLive);
@@ -447,9 +489,8 @@ async function startDownload() {
   if (!urls) return;
   const btn = document.getElementById('btnDownload');
   btn.disabled = true;
-  // Check if search URLs are present for better UX feedback
   const hasSearchUrl = urls.match(/storyblocks\.com\/.*\/search\/|elements\.envato\.com\/.+\?|dvidshub\.net\/search\/\?/);
-  btn.textContent = hasSearchUrl ? '🔍 Scanning search pages...' : '⏳ Starting...';
+  btn.textContent = hasSearchUrl ? 'Scanning...' : 'Starting...';
   try {
     await fetch(`${API}/api/config`, {
       method: 'POST', headers: {'Content-Type': 'application/json'},
@@ -463,32 +504,28 @@ async function startDownload() {
     if (data.error) { toast(data.error, 'error'); }
     else {
       const msgs = [];
-      if (data.videos_found > 0) msgs.push(`Found ${data.videos_found} videos from search`);
-      if (data.fixed > 0) msgs.push(`${data.fixed} URL(s) auto-fixed`);
-      if (data.skipped > 0) msgs.push(`${data.skipped} line(s) skipped`);
+      if (data.videos_found > 0) msgs.push(`Found ${data.videos_found} videos`);
+      if (data.fixed > 0) msgs.push(`${data.fixed} auto-fixed`);
+      if (data.skipped > 0) msgs.push(`${data.skipped} skipped`);
       if (msgs.length) toast(msgs.join(' · '), data.videos_found > 0 ? undefined : 'warn');
       urlInput.value = '';
-      urlCount.innerHTML = '<span style="opacity:0.5">0 URLs</span>';
+      urlCount.innerHTML = '<span style="opacity:0.35">0 URLs</span>';
       lastParsedCount = 0;
       startPolling();
     }
   } catch (e) { toast('Cannot connect to server', 'error'); }
   btn.disabled = false;
-  btn.textContent = '⬇ Download';
+  btn.textContent = '\u2193 Download';
 }
 
 // ── Cancel ──
 async function cancelTask(taskId) {
-  try {
-    await fetch(`${API}/api/cancel/${taskId}`, { method: 'POST' });
-    updateQueue();
-  } catch (e) {}
+  try { await fetch(`${API}/api/cancel/${taskId}`, { method: 'POST' }); updateQueue(); } catch (e) {}
 }
 
 // ── Polling ──
 let stopPollTimer = null;
 function startPolling() {
-  // Cancel any pending stop
   if (stopPollTimer) { clearTimeout(stopPollTimer); stopPollTimer = null; }
   if (pollInterval) return;
   pollInterval = setInterval(updateQueue, 800);
@@ -504,19 +541,25 @@ async function updateQueue() {
     const tasks = Object.values(data);
     const hasActive = tasks.some(t => t.status === 'queued' || t.status === 'downloading');
     const allDone = tasks.length > 0 && !hasActive;
-
-    // Title notification when all done
     if (allDone && !prevAllDone) {
       const doneCount = tasks.filter(t => t.status === 'done').length;
       document.title = `\u2705 ${doneCount} done \u2014 VidGrab`;
       setTimeout(() => { document.title = originalTitle; }, 8000);
     }
     prevAllDone = allDone;
-
     if (allDone && !stopPollTimer) {
       stopPollTimer = setTimeout(() => { if (pollInterval) { clearInterval(pollInterval); pollInterval = null; } stopPollTimer = null; }, 2000);
     }
   } catch (e) {}
+}
+
+function getSourceBadge(url) {
+  if (!url) return '';
+  if (url.includes('envato.com')) return '<span class="badge badge-envato">Envato</span>';
+  if (url.includes('storyblocks.com')) return '<span class="badge badge-sb">Storyblocks</span>';
+  if (url.includes('dvidshub.net')) return '<span class="badge badge-dv">DVIDSHUB</span>';
+  if (url.includes('youtube.com') || url.includes('youtu.be')) return '<span class="badge badge-yt">YouTube</span>';
+  return '';
 }
 
 function renderQueue(data) {
@@ -524,74 +567,72 @@ function renderQueue(data) {
   const header = document.getElementById('queueHeader');
   const empty = document.getElementById('emptyState');
   const tasks = Object.entries(data);
-  if (tasks.length === 0) { queue.innerHTML = ''; header.style.display = 'none'; empty.style.display = ''; return; }
+
+  document.getElementById('queueCount').textContent = tasks.length;
+
+  if (tasks.length === 0) {
+    queue.innerHTML = ''; header.style.display = 'none'; empty.style.display = ''; return;
+  }
   header.style.display = 'flex';
   empty.style.display = 'none';
 
-  // Track existing card elements by task id
   const existing = {};
   queue.querySelectorAll('.task-card[data-id]').forEach(el => { existing[el.dataset.id] = el; });
 
-  // Remove cards no longer in data
   const dataIds = new Set(tasks.map(([id]) => id));
-  for (const [id, el] of Object.entries(existing)) {
-    if (!dataIds.has(id)) el.remove();
-  }
+  for (const [id, el] of Object.entries(existing)) { if (!dataIds.has(id)) el.remove(); }
 
   tasks.forEach(([id, t], idx) => {
-    const statusIcon = { queued: '\u23F3', downloading: '\u2B07\uFE0F', done: '\u2705', error: '\u274C' }[t.status] || '\u23F3';
+    const iconChar = { queued: '\u23F3', downloading: '\u2193', done: '\u2713', error: '\u2715' }[t.status] || '\u23F3';
     const pctClass = t.status === 'done' ? 'done' : t.status === 'error' ? 'error' : '';
     const pctText = t.status === 'done' ? '100%' : t.status === 'error' ? 'ERR' : t.progress > 0 ? `${Math.round(t.progress)}%` : '\u2014';
-    const metaParts = [];
-    if (t.speed && t.status === 'downloading') metaParts.push(escHtml(t.speed));
-    if (t.eta && t.status === 'downloading') metaParts.push(`ETA ${escHtml(t.eta)}`);
-    if (t.status === 'error' && t.error) metaParts.push(escHtml(t.error));
-    if (t.status === 'done') metaParts.push('Completed');
-    if (t.status === 'queued') metaParts.push('Waiting...');
-
-    let sourceBadge = '';
-    const url = t.url || '';
-    if (url.includes('envato.com')) sourceBadge = '<span class="source-badge envato">Envato</span>';
-    else if (url.includes('storyblocks.com')) sourceBadge = '<span class="source-badge storyblocks">Storyblocks</span>';
-    else if (url.includes('dvidshub.net')) sourceBadge = '<span class="source-badge dvidshub">DVIDSHUB</span>';
-    else if (url.includes('youtube.com') || url.includes('youtu.be')) sourceBadge = '<span class="source-badge youtube">YouTube</span>';
-
+    const badge = getSourceBadge(t.url);
+    const subParts = [];
+    if (t.speed && t.status === 'downloading') subParts.push(escHtml(t.speed));
+    if (t.eta && t.status === 'downloading') subParts.push(`ETA ${escHtml(t.eta)}`);
+    if (t.status === 'error' && t.error) subParts.push(escHtml(t.error));
+    if (t.status === 'done') subParts.push('Completed');
+    if (t.status === 'queued') subParts.push('Waiting...');
     const cancelBtn = (t.status === 'downloading' || t.status === 'queued')
-      ? `<button class="task-cancel" onclick="cancelTask('${id}')" title="Cancel">\u2715</button>` : '';
+      ? `<button class="btn-cancel" onclick="cancelTask('${id}')" title="Cancel">\u2715</button>` : '';
 
     let card = existing[id];
     if (card) {
-      // Update existing card in-place (no DOM rebuild = no flicker)
-      const icon = card.querySelector('.task-status-icon');
-      if (icon.className !== `task-status-icon ${t.status}`) icon.className = `task-status-icon ${t.status}`;
-      if (icon.textContent !== statusIcon) icon.textContent = statusIcon;
-      const title = card.querySelector('.task-title');
-      const titleHtml = `${escHtml(t.title)}${sourceBadge}`;
-      if (title.innerHTML !== titleHtml) { title.innerHTML = titleHtml; title.title = t.title; }
-      const meta = card.querySelector('.task-meta');
-      const metaHtml = `${metaParts.join(' \u00B7 ')} ${cancelBtn}`;
-      if (meta.innerHTML !== metaHtml) meta.innerHTML = metaHtml;
+      card.className = `task-card st-${t.status}`;
+      const ic = card.querySelector('.task-icon');
+      if (!ic.classList.contains(t.status)) { ic.className = `task-icon ${t.status}`; ic.textContent = iconChar; }
+      const nm = card.querySelector('.task-name');
+      const nmHtml = `${escHtml(t.title)}${badge}`;
+      if (nm.innerHTML !== nmHtml) { nm.innerHTML = nmHtml; nm.title = t.title; }
+      const sb = card.querySelector('.task-sub');
+      const sbHtml = subParts.join(' &middot; ');
+      if (sb.innerHTML !== sbHtml) sb.innerHTML = sbHtml;
       const fill = card.querySelector('.progress-fill');
       fill.className = `progress-fill ${pctClass}`;
       fill.style.width = `${t.progress || 0}%`;
       const pct = card.querySelector('.progress-pct');
-      if (pct.textContent !== pctText) pct.textContent = pctText;
+      if (pct.textContent !== pctText) { pct.textContent = pctText; pct.className = `progress-pct ${pctClass}`; }
+      const canc = card.querySelector('.btn-cancel');
+      const right = card.querySelector('.task-right');
+      if (cancelBtn && !canc) right.insertAdjacentHTML('afterbegin', cancelBtn);
+      else if (!cancelBtn && canc) canc.remove();
     } else {
-      // Create new card
       card = document.createElement('div');
-      card.className = 'task-card';
+      card.className = `task-card st-${t.status}`;
       card.dataset.id = id;
       card.innerHTML = `
-        <div class="task-status-icon ${t.status}">${statusIcon}</div>
-        <div class="task-info">
-          <div class="task-title" title="${escHtml(t.title)}">${escHtml(t.title)}${sourceBadge}</div>
-          <div class="task-meta">${metaParts.join(' \u00B7 ')} ${cancelBtn}</div>
+        <div class="task-icon ${t.status}">${iconChar}</div>
+        <div class="task-body">
+          <div class="task-name" title="${escHtml(t.title)}">${escHtml(t.title)}${badge}</div>
+          <div class="task-sub">${subParts.join(' &middot; ')}</div>
         </div>
-        <div class="progress-bar"><div class="progress-fill ${pctClass}" style="width:${t.progress || 0}%"></div></div>
-        <div class="progress-pct">${pctText}</div>`;
+        <div class="task-right">
+          ${cancelBtn}
+          <div class="progress-bar"><div class="progress-fill ${pctClass}" style="width:${t.progress||0}%"></div></div>
+          <div class="progress-pct ${pctClass}">${pctText}</div>
+        </div>`;
       queue.appendChild(card);
     }
-    // Ensure correct order
     if (queue.children[idx] !== card) queue.insertBefore(card, queue.children[idx]);
   });
 }
@@ -655,93 +696,62 @@ function toast(msg, type) {
   t.textContent = msg;
   t.style.borderColor = type === 'error' ? 'var(--red)' : type === 'warn' ? 'var(--orange)' : 'var(--green)';
   t.classList.add('show');
-  setTimeout(() => t.classList.remove('show'), 3000);
+  setTimeout(() => t.classList.remove('show'), 3500);
 }
 
-// ── Cookie Management (Universal Import) ──
+// ── Cookies ──
 function togglePasteBox(site) {
   const key = site.charAt(0).toUpperCase() + site.slice(1);
   const box = document.getElementById(`cookiePaste${key}`);
   box.style.display = box.style.display === 'none' ? 'block' : 'none';
 }
-
 async function uploadCookieFile(site, input) {
-  const file = input.files[0];
-  if (!file) return;
+  const file = input.files[0]; if (!file) return;
   try {
-    const text = await file.text();
-    const data = JSON.parse(text);
+    const data = JSON.parse(await file.text());
     const cookies = Array.isArray(data) ? data : data.cookies || data;
-    const res = await fetch(`${API}/api/cookies/import/${site}`, {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ cookies })
-    });
+    const res = await fetch(`${API}/api/cookies/import/${site}`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ cookies }) });
     const result = await res.json();
     if (result.error) { toast(result.error, 'error'); return; }
-    toast(result.message);
-    loadCookieStatus();
-  } catch (e) {
-    toast(`Invalid JSON file: ${e.message}`, 'error');
-  }
+    toast(result.message); loadCookieStatus();
+  } catch (e) { toast(`Invalid JSON: ${e.message}`, 'error'); }
   input.value = '';
 }
-
 async function uploadAllCookies(input) {
-  const file = input.files[0];
-  if (!file) return;
+  const file = input.files[0]; if (!file) return;
   try {
-    const text = await file.text();
-    const data = JSON.parse(text);
-    const cookies = Array.isArray(data) ? data : data.cookies || data;
-    await submitAllCookies(cookies);
-  } catch (e) {
-    toast(`Invalid JSON file: ${e.message}`, 'error');
-  }
+    const data = JSON.parse(await file.text());
+    await submitAllCookies(Array.isArray(data) ? data : data.cookies || data);
+  } catch (e) { toast(`Invalid JSON: ${e.message}`, 'error'); }
   input.value = '';
 }
-
 async function saveAllPastedCookies() {
   const textarea = document.getElementById('cookiePasteInputAll');
   const raw = textarea.value.trim();
   if (!raw) { toast('Paste cookie JSON first', 'error'); return; }
   try {
     const data = JSON.parse(raw);
-    const cookies = Array.isArray(data) ? data : data.cookies || data;
-    await submitAllCookies(cookies);
+    await submitAllCookies(Array.isArray(data) ? data : data.cookies || data);
     textarea.value = '';
     document.getElementById('cookiePasteAll').style.display = 'none';
-  } catch (e) {
-    toast(`Invalid JSON: ${e.message}`, 'error');
-  }
+  } catch (e) { toast(`Invalid JSON: ${e.message}`, 'error'); }
 }
-
 async function submitAllCookies(cookies) {
   try {
-    const res = await fetch(`${API}/api/cookies/import-all`, {
-      method: 'POST', headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ cookies })
-    });
+    const res = await fetch(`${API}/api/cookies/import-all`, { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ cookies }) });
     const data = await res.json();
     if (data.error) { toast(data.error, 'error'); return; }
-    toast(data.message);
-    loadCookieStatus();
-  } catch (e) {
-    toast('Failed to import cookies', 'error');
-  }
+    toast(data.message); loadCookieStatus();
+  } catch (e) { toast('Failed to import cookies', 'error'); }
 }
-
 async function deleteAllCookies() {
   try {
     const res = await fetch(`${API}/api/cookies/delete-all`, { method: 'POST' });
     const data = await res.json();
     if (data.error) { toast(data.error, 'error'); return; }
-    toast(data.message);
-    loadCookieStatus();
-  } catch (e) {
-    toast('Failed to delete cookies', 'error');
-  }
+    toast(data.message); loadCookieStatus();
+  } catch (e) { toast('Failed to delete', 'error'); }
 }
-
 async function loadCookieStatus() {
   try {
     const res = await fetch(`${API}/api/cookies/status`);
@@ -749,27 +759,14 @@ async function loadCookieStatus() {
     let anyExists = false;
     for (const site of ['envato', 'storyblocks', 'dvidshub']) {
       const key = site.charAt(0).toUpperCase() + site.slice(1);
-      const statusEl = document.getElementById(`cookieStatus${key}`);
+      const el = document.getElementById(`cookieStatus${key}`);
       const info = data[site];
-      if (info && info.exists) {
-        statusEl.textContent = `✓ ${info.cookie_count} cookies`;
-        statusEl.className = 'cookie-status active';
-        anyExists = true;
-      } else {
-        statusEl.textContent = 'No cookies';
-        statusEl.className = 'cookie-status';
-      }
+      if (info && info.exists) { el.textContent = `\u2713 ${info.cookie_count} cookies`; el.className = 'cookie-status active'; anyExists = true; }
+      else { el.textContent = 'No cookies'; el.className = 'cookie-status'; }
     }
-    // yt-dlp cookie file status
     const ytEl = document.getElementById('cookieStatusYtdlp');
-    if (data._ytdlp) {
-      ytEl.textContent = `✓ cookies.txt`;
-      ytEl.className = 'cookie-status active';
-      anyExists = true;
-    } else {
-      ytEl.textContent = anyExists ? '✓ cookies.txt' : 'No cookies';
-      ytEl.className = anyExists ? 'cookie-status active' : 'cookie-status';
-    }
+    if (data._ytdlp) { ytEl.textContent = '\u2713 cookies.txt'; ytEl.className = 'cookie-status active'; anyExists = true; }
+    else { ytEl.textContent = anyExists ? '\u2713 cookies.txt' : 'No cookies'; ytEl.className = anyExists ? 'cookie-status active' : 'cookie-status'; }
     document.getElementById('btnDeleteAll').style.display = anyExists ? '' : 'none';
   } catch (e) {}
 }
@@ -791,7 +788,6 @@ checkDeps();
       c.classList.toggle('active', (selectedFormat === 'mp3' && c.dataset.q === 'mp3') || (selectedFormat !== 'mp3' && c.dataset.q === selectedQuality));
     });
   } catch (e) {}
-  // Resume polling if there are active downloads (e.g. page refresh)
   try {
     const res = await fetch(`${API}/api/status`);
     const data = await res.json();
