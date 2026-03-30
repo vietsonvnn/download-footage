@@ -1558,6 +1558,8 @@ def start_download():
     expanded_urls, search_stats = expand_search_urls(valid_urls, cfg)
     stats.update(search_stats)
 
+    if len(valid_urls) > MAX_BULK_URLS:
+        return jsonify({"error": f"Too many URLs ({len(valid_urls)}). Max {MAX_BULK_URLS} per batch."}), 400
     if len(expanded_urls) > MAX_QUEUE_SIZE:
         return jsonify({"error": f"Too many videos ({len(expanded_urls)}). Max {MAX_QUEUE_SIZE} per batch."}), 400
     with download_lock:
