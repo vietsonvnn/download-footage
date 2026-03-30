@@ -26,6 +26,26 @@ try:
 except ImportError:
     browser_cookie3 = None
 
+# ─── Ensure ffmpeg & deno are discoverable (winget installs outside default PATH) ───
+def _ensure_winget_tools_in_path():
+    if platform.system() != "Windows":
+        return
+    import glob
+    local = os.environ.get("LOCALAPPDATA", "")
+    if not local:
+        return
+    for tool in ("ffmpeg.exe", "deno.exe"):
+        try:
+            subprocess.run([tool.replace(".exe", ""), "--version"], capture_output=True, timeout=3)
+            continue  # already in PATH
+        except (FileNotFoundError, subprocess.TimeoutExpired):
+            pass
+        for exe in glob.glob(os.path.join(local, "Microsoft", "WinGet", "Packages", "**", tool), recursive=True):
+            os.environ["PATH"] = os.path.dirname(exe) + os.pathsep + os.environ.get("PATH", "")
+            break
+
+_ensure_winget_tools_in_path()
+
 # ─── Constants ───────────────────────────────────────────────────────
 MAX_BULK_URLS = 50
 MAX_QUEUE_SIZE = 100
@@ -1358,11 +1378,13 @@ semaphore = threading.Semaphore(config["concurrent_downloads"])
 processes = {}
 
 def _get_ytdlp_cookie_args():
-    """Return cookie args for yt-dlp: prefer cookies.txt file, fallback to browser."""
+    """Return cookie args for yt-dlp: use cookies.txt if available, otherwise none.
+    --cookies-from-browser chrome is unreliable on Windows (Chrome locks its DB).
+    """
     cookie_file = COOKIES_DIR / "cookies.txt"
     if cookie_file.exists() and cookie_file.stat().st_size > 100:
         return ["--cookies", str(cookie_file)]
-    return ["--cookies-from-browser", "chrome"]
+    return []
 
 def build_ytdlp_cmd(url, cfg, seq=None):
     dl_dir = cfg.get("download_dir", DEFAULT_CONFIG["download_dir"])
@@ -1384,7 +1406,8 @@ def build_ytdlp_cmd(url, cfg, seq=None):
     if fmt == "mp3":
         cmd += ["-x", "--audio-format", "mp3", "--audio-quality", "0"]
     else:
-        cmd += ["-f", f"bestvideo[height<={quality}]+bestaudio/best[height<={quality}]/best",
+        # Fallback chain: quality merge → any merge → single stream at quality → any single stream
+        cmd += ["-f", f"bv[height<={quality}]+ba/bv+ba/b[height<={quality}]/b",
                 "--merge-output-format", fmt]
     cmd.append(url)
     return cmd
@@ -1392,11 +1415,15 @@ def build_ytdlp_cmd(url, cfg, seq=None):
 def get_video_title(url):
     try:
         result = subprocess.run(
-            [sys.executable, "-m", "yt_dlp", "--get-title", "--no-playlist", *_get_ytdlp_cookie_args(), url],
-            capture_output=True, text=True, timeout=15)
-        return result.stdout.strip() or "Unknown"
+            [sys.executable, "-m", "yt_dlp", "--get-title", "--no-playlist",
+             *_get_ytdlp_cookie_args(), "--remote-components", "ejs:github", url],
+            capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
+        title = result.stdout.strip()
+        if title and title != "NA":
+            return title
     except Exception:
-        return "Unknown"
+        pass
+    return ""
 
 def download_worker(task_id, url, cfg):
     semaphore.acquire()
@@ -1405,12 +1432,18 @@ def download_worker(task_id, url, cfg):
             if task_id not in downloads:
                 return
             downloads[task_id]["status"] = "downloading"
-            downloads[task_id]["title"] = get_video_title(url)
 
+        # Fetch title OUTSIDE the lock (can take up to 30s)
+        title = get_video_title(url)
         with download_lock:
-            seq = downloads[task_id].get("seq") if task_id in downloads else None
+            if task_id not in downloads:
+                return
+            if title:
+                downloads[task_id]["title"] = title
+            seq = downloads[task_id].get("seq")
         cmd = build_ytdlp_cmd(url, cfg, seq=seq)
-        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True, bufsize=1)
+        process = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                    text=True, encoding="utf-8", errors="replace", bufsize=1)
 
         with download_lock:
             if task_id not in downloads:
@@ -1443,7 +1476,15 @@ def download_worker(task_id, url, cfg):
             if "[download] Destination:" in line:
                 with download_lock:
                     if task_id in downloads:
-                        downloads[task_id]["filename"] = os.path.basename(line.split("Destination:")[-1].strip())
+                        fname = os.path.basename(line.split("Destination:")[-1].strip())
+                        downloads[task_id]["filename"] = fname
+                        # Extract title from filename if still "Fetching..."
+                        if downloads[task_id]["title"] == "Fetching...":
+                            # Remove seq prefix and extension: "01. Title.mp4" → "Title"
+                            name = re.sub(r'^\d+\.\s*', '', fname)
+                            name = re.sub(r'\.[^.]+$', '', name)
+                            if name:
+                                downloads[task_id]["title"] = name
             if "[Merger]" in line or "[ExtractAudio]" in line:
                 with download_lock:
                     if task_id in downloads:
@@ -1452,15 +1493,16 @@ def download_worker(task_id, url, cfg):
         process.wait()
         with download_lock:
             if task_id in downloads:
-                if process.returncode == 0:
-                    downloads[task_id].update(status="done", progress=100, speed="", eta="", done_at=time.time())
-                else:
-                    # Show actual error from yt-dlp output
-                    error_msg = "yt-dlp exited with error"
-                    error_details = [l for l in last_error_lines if l.startswith("ERROR:")]
-                    if error_details:
-                        error_msg = error_details[-1].replace("ERROR: ", "", 1)
-                    downloads[task_id].update(status="error", error=error_msg, done_at=time.time())
+                # Don't overwrite if already cancelled/errored
+                if downloads[task_id]["status"] not in ("done", "error"):
+                    if process.returncode == 0:
+                        downloads[task_id].update(status="done", progress=100, speed="", eta="", done_at=time.time())
+                    else:
+                        error_msg = "yt-dlp exited with error"
+                        error_details = [l for l in last_error_lines if l.startswith("ERROR:")]
+                        if error_details:
+                            error_msg = error_details[-1].replace("ERROR: ", "", 1)
+                        downloads[task_id].update(status="error", error=error_msg, done_at=time.time())
 
     except Exception as e:
         with download_lock:
@@ -1599,13 +1641,15 @@ def cancel_download(task_id):
         task = downloads.get(task_id)
     if not task:
         return jsonify({"error": "Task not found"}), 404
+    if task["status"] in ("done", "error"):
+        return jsonify({"ok": True})
     if proc:
         try:
             proc.kill()
         except Exception:
             pass
     with download_lock:
-        if task_id in downloads:
+        if task_id in downloads and downloads[task_id]["status"] not in ("done", "error"):
             downloads[task_id].update(status="error", error="Cancelled", done_at=time.time())
     return jsonify({"ok": True})
 
@@ -1655,7 +1699,7 @@ def open_folder():
         if platform.system() == "Darwin":
             subprocess.Popen(["open", folder])
         elif platform.system() == "Windows":
-            os.startfile(folder)
+            subprocess.Popen(["explorer", folder])
         else:
             subprocess.Popen(["xdg-open", folder])
         return jsonify({"ok": True})
@@ -1837,6 +1881,6 @@ def check_deps():
 if __name__ == "__main__":
     import webbrowser
     port = int(os.environ.get("PORT", 9123))
-    print(f"\n  🎬 VidGrab v2.2 — http://localhost:{port}\n  Press Ctrl+C to stop\n")
+    print(f"\n  VidGrab v2.2 -- http://localhost:{port}\n  Press Ctrl+C to stop\n")
     threading.Timer(1.2, lambda: webbrowser.open(f"http://localhost:{port}")).start()
     app.run(host="127.0.0.1", port=port, debug=False)

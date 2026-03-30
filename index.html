@@ -1,10 +1,10 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>VidGrab — Video Downloader</title>
-<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Outfit:wght@300;400;500;600;700&subset=latin,latin-ext,vietnamese&display=swap" rel="stylesheet">
 <style>
   :root {
     --bg: #0f1117;
@@ -486,7 +486,10 @@ async function cancelTask(taskId) {
 }
 
 // ── Polling ──
+let stopPollTimer = null;
 function startPolling() {
+  // Cancel any pending stop
+  if (stopPollTimer) { clearTimeout(stopPollTimer); stopPollTimer = null; }
   if (pollInterval) return;
   pollInterval = setInterval(updateQueue, 800);
   updateQueue();
@@ -499,18 +502,19 @@ async function updateQueue() {
     const data = await res.json();
     renderQueue(data);
     const tasks = Object.values(data);
-    const allDone = tasks.length > 0 && tasks.every(t => t.status === 'done' || t.status === 'error');
+    const hasActive = tasks.some(t => t.status === 'queued' || t.status === 'downloading');
+    const allDone = tasks.length > 0 && !hasActive;
 
     // Title notification when all done
     if (allDone && !prevAllDone) {
       const doneCount = tasks.filter(t => t.status === 'done').length;
-      document.title = `✅ ${doneCount} done — VidGrab`;
+      document.title = `\u2705 ${doneCount} done \u2014 VidGrab`;
       setTimeout(() => { document.title = originalTitle; }, 8000);
     }
     prevAllDone = allDone;
 
-    if (allDone) {
-      setTimeout(() => { if (pollInterval) { clearInterval(pollInterval); pollInterval = null; } }, 2000);
+    if (allDone && !stopPollTimer) {
+      stopPollTimer = setTimeout(() => { if (pollInterval) { clearInterval(pollInterval); pollInterval = null; } stopPollTimer = null; }, 2000);
     }
   } catch (e) {}
 }
@@ -524,10 +528,20 @@ function renderQueue(data) {
   header.style.display = 'flex';
   empty.style.display = 'none';
 
-  queue.innerHTML = tasks.map(([id, t]) => {
-    const statusIcon = { queued: '⏳', downloading: '⬇️', done: '✅', error: '❌' }[t.status] || '⏳';
+  // Track existing card elements by task id
+  const existing = {};
+  queue.querySelectorAll('.task-card[data-id]').forEach(el => { existing[el.dataset.id] = el; });
+
+  // Remove cards no longer in data
+  const dataIds = new Set(tasks.map(([id]) => id));
+  for (const [id, el] of Object.entries(existing)) {
+    if (!dataIds.has(id)) el.remove();
+  }
+
+  tasks.forEach(([id, t], idx) => {
+    const statusIcon = { queued: '\u23F3', downloading: '\u2B07\uFE0F', done: '\u2705', error: '\u274C' }[t.status] || '\u23F3';
     const pctClass = t.status === 'done' ? 'done' : t.status === 'error' ? 'error' : '';
-    const pctText = t.status === 'done' ? '100%' : t.status === 'error' ? 'ERR' : t.progress > 0 ? `${Math.round(t.progress)}%` : '—';
+    const pctText = t.status === 'done' ? '100%' : t.status === 'error' ? 'ERR' : t.progress > 0 ? `${Math.round(t.progress)}%` : '\u2014';
     const metaParts = [];
     if (t.speed && t.status === 'downloading') metaParts.push(escHtml(t.speed));
     if (t.eta && t.status === 'downloading') metaParts.push(`ETA ${escHtml(t.eta)}`);
@@ -535,7 +549,6 @@ function renderQueue(data) {
     if (t.status === 'done') metaParts.push('Completed');
     if (t.status === 'queued') metaParts.push('Waiting...');
 
-    // Source badge
     let sourceBadge = '';
     const url = t.url || '';
     if (url.includes('envato.com')) sourceBadge = '<span class="source-badge envato">Envato</span>';
@@ -544,18 +557,43 @@ function renderQueue(data) {
     else if (url.includes('youtube.com') || url.includes('youtu.be')) sourceBadge = '<span class="source-badge youtube">YouTube</span>';
 
     const cancelBtn = (t.status === 'downloading' || t.status === 'queued')
-      ? `<button class="task-cancel" onclick="cancelTask('${id}')" title="Cancel">✕</button>` : '';
+      ? `<button class="task-cancel" onclick="cancelTask('${id}')" title="Cancel">\u2715</button>` : '';
 
-    return `<div class="task-card">
-      <div class="task-status-icon ${t.status}">${statusIcon}</div>
-      <div class="task-info">
-        <div class="task-title" title="${escHtml(t.title)}">${escHtml(t.title)}${sourceBadge}</div>
-        <div class="task-meta">${metaParts.join(' · ')} ${cancelBtn}</div>
-      </div>
-      <div class="progress-bar"><div class="progress-fill ${pctClass}" style="width:${t.progress || 0}%"></div></div>
-      <div class="progress-pct">${pctText}</div>
-    </div>`;
-  }).join('');
+    let card = existing[id];
+    if (card) {
+      // Update existing card in-place (no DOM rebuild = no flicker)
+      const icon = card.querySelector('.task-status-icon');
+      if (icon.className !== `task-status-icon ${t.status}`) icon.className = `task-status-icon ${t.status}`;
+      if (icon.textContent !== statusIcon) icon.textContent = statusIcon;
+      const title = card.querySelector('.task-title');
+      const titleHtml = `${escHtml(t.title)}${sourceBadge}`;
+      if (title.innerHTML !== titleHtml) { title.innerHTML = titleHtml; title.title = t.title; }
+      const meta = card.querySelector('.task-meta');
+      const metaHtml = `${metaParts.join(' \u00B7 ')} ${cancelBtn}`;
+      if (meta.innerHTML !== metaHtml) meta.innerHTML = metaHtml;
+      const fill = card.querySelector('.progress-fill');
+      fill.className = `progress-fill ${pctClass}`;
+      fill.style.width = `${t.progress || 0}%`;
+      const pct = card.querySelector('.progress-pct');
+      if (pct.textContent !== pctText) pct.textContent = pctText;
+    } else {
+      // Create new card
+      card = document.createElement('div');
+      card.className = 'task-card';
+      card.dataset.id = id;
+      card.innerHTML = `
+        <div class="task-status-icon ${t.status}">${statusIcon}</div>
+        <div class="task-info">
+          <div class="task-title" title="${escHtml(t.title)}">${escHtml(t.title)}${sourceBadge}</div>
+          <div class="task-meta">${metaParts.join(' \u00B7 ')} ${cancelBtn}</div>
+        </div>
+        <div class="progress-bar"><div class="progress-fill ${pctClass}" style="width:${t.progress || 0}%"></div></div>
+        <div class="progress-pct">${pctText}</div>`;
+      queue.appendChild(card);
+    }
+    // Ensure correct order
+    if (queue.children[idx] !== card) queue.insertBefore(card, queue.children[idx]);
+  });
 }
 
 // ── Clear / Folder ──
@@ -752,6 +790,16 @@ checkDeps();
     document.querySelectorAll('.chip').forEach(c => {
       c.classList.toggle('active', (selectedFormat === 'mp3' && c.dataset.q === 'mp3') || (selectedFormat !== 'mp3' && c.dataset.q === selectedQuality));
     });
+  } catch (e) {}
+  // Resume polling if there are active downloads (e.g. page refresh)
+  try {
+    const res = await fetch(`${API}/api/status`);
+    const data = await res.json();
+    const tasks = Object.values(data);
+    if (tasks.length > 0) {
+      renderQueue(data);
+      if (tasks.some(t => t.status === 'queued' || t.status === 'downloading')) startPolling();
+    }
   } catch (e) {}
 })();
 </script>
