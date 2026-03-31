@@ -397,9 +397,11 @@ def _save_netscape_cookies(cookies_list):
         secure = "TRUE" if c.get("secure") or c.get("Secure") else "FALSE"
         # httpOnly → domain starts with #HttpOnly_
         http_only = c.get("httpOnly") or c.get("HttpOnly", False)
-        expiry = str(int(c.get("expirationDate") or c.get("expiry") or c.get("expires") or 0))
-        host_only = not domain.startswith(".")
-        include_subdomains = "FALSE" if host_only else "TRUE"
+        try:
+            expiry = str(int(float(c.get("expirationDate") or c.get("expiry") or c.get("expires") or 0)))
+        except (ValueError, TypeError):
+            expiry = "0"
+        include_subdomains = "TRUE"  # dot was prepended above, so always include subdomains
         prefix = "#HttpOnly_" if http_only else ""
         lines.append(f"{prefix}{domain}\t{include_subdomains}\t{path}\t{secure}\t{expiry}\t{name}\t{value}")
     with open(cookie_file, "w", encoding="utf-8") as f:
@@ -1538,16 +1540,18 @@ def build_ytdlp_cmd(url, cfg, seq=None):
     else:
         # Prefer H.264 (avc1) video + AAC audio for max compatibility with editors
         # (Premiere Pro, CapCut, DaVinci Resolve, etc.)
-        # Fallback: any codec, then re-encode via --postprocessor-args
+        # -S sorts available formats to prefer h264+aac before falling back
+        # Merger PP re-encodes to H.264/AAC only during the merge step;
+        # --recode-video mp4 handles single-stream downloads (no merge needed)
         cmd += [
-            "-f", (
-                f"bv[height<={quality}][vcodec~='^(avc|h264)']+ba[acodec~='^(mp4a|aac)']/"
-                f"bv[height<={quality}][vcodec~='^(avc|h264)']+ba/"
-                f"bv[height<={quality}]+ba/bv+ba/"
-                f"b[height<={quality}]/b"
-            ),
+            "-f", f"bv[height<={quality}]+ba/b[height<={quality}]/b",
+            "-S", f"vcodec:h264,acodec:aac,height:{quality}",
             "--merge-output-format", "mp4",
-            "--postprocessor-args", "ffmpeg:-c:v libx264 -preset medium -crf 18 -c:a aac -b:a 192k -movflags +faststart -pix_fmt yuv420p",
+            "--recode-video", "mp4",
+            "--postprocessor-args",
+            "Merger:-c:v libx264 -preset fast -crf 18 -c:a aac -b:a 192k -movflags +faststart -pix_fmt yuv420p",
+            "--postprocessor-args",
+            "VideoConvertor:-c:v libx264 -preset fast -crf 18 -c:a aac -b:a 192k -movflags +faststart -pix_fmt yuv420p",
         ]
     cmd.append(url)
     return cmd
@@ -1693,13 +1697,13 @@ def start_download():
     if not valid_urls:
         return jsonify({"error": "No valid URLs found. Paste YouTube links or video URLs."}), 400
 
+    if len(valid_urls) > MAX_BULK_URLS:
+        return jsonify({"error": f"Too many URLs ({len(valid_urls)}). Max {MAX_BULK_URLS} per batch."}), 400
+
     # Expand search/category URLs into individual video URLs
     cfg = validate_config(load_config())
     expanded_urls, search_stats = expand_search_urls(valid_urls, cfg)
     stats.update(search_stats)
-
-    if len(valid_urls) > MAX_BULK_URLS:
-        return jsonify({"error": f"Too many URLs ({len(valid_urls)}). Max {MAX_BULK_URLS} per batch."}), 400
     if len(expanded_urls) > MAX_QUEUE_SIZE:
         return jsonify({"error": f"Too many videos ({len(expanded_urls)}). Max {MAX_QUEUE_SIZE} per batch."}), 400
     with download_lock:
@@ -1781,10 +1785,10 @@ def cancel_download(task_id):
     with download_lock:
         proc = processes.get(task_id)
         task = downloads.get(task_id)
-    if not task:
-        return jsonify({"error": "Task not found"}), 404
-    if task["status"] in ("done", "error"):
-        return jsonify({"ok": True})
+        if not task:
+            return jsonify({"error": "Task not found"}), 404
+        if task["status"] in ("done", "error"):
+            return jsonify({"ok": True})
     if proc:
         try:
             proc.kill()
@@ -1828,7 +1832,17 @@ def update_config():
             cfg[key] = data[key]
     cfg = validate_config(cfg)
     save_config(cfg)
-    semaphore = threading.Semaphore(cfg["concurrent_downloads"])
+    # Adjust existing semaphore capacity instead of replacing the object
+    # (replacing would orphan threads waiting on the old semaphore)
+    old_limit = config.get("concurrent_downloads", DEFAULT_CONFIG["concurrent_downloads"])
+    new_limit = cfg["concurrent_downloads"]
+    diff = new_limit - old_limit
+    if diff > 0:
+        for _ in range(diff):
+            semaphore.release()
+    elif diff < 0:
+        for _ in range(-diff):
+            semaphore.acquire(blocking=False)
     config = cfg
     return jsonify(cfg)
 

@@ -469,7 +469,7 @@ let selectedFormat = 'mp4';
 const originalTitle = document.title;
 
 function escHtml(s) {
-  return s ? s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;') : '';
+  return s ? s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;').replace(/`/g,'&#96;') : '';
 }
 
 // ── Smart URL Parser ──
@@ -588,7 +588,7 @@ async function updateQueue() {
     if (allDone && !stopPollTimer) {
       stopPollTimer = setTimeout(() => { if (pollInterval) { clearInterval(pollInterval); pollInterval = null; } stopPollTimer = null; }, 2000);
     }
-  } catch (e) {}
+  } catch (e) { console.warn('Queue poll error:', e); }
 }
 
 function getSourceBadge(url) {
@@ -783,6 +783,7 @@ async function submitAllCookies(cookies) {
   } catch (e) { toast('Failed to import cookies', 'error'); }
 }
 async function deleteAllCookies() {
+  if (!confirm('Delete all imported cookies for every site? This cannot be undone.')) return;
   try {
     const res = await fetch(`${API}/api/cookies/delete-all`, { method: 'POST' });
     const data = await res.json();
@@ -811,7 +812,11 @@ async function loadCookieStatus() {
 
 // ── Keyboard ──
 document.addEventListener('keydown', (e) => {
-  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') startDownload();
+  if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
+    const active = document.activeElement;
+    const inSettings = active && active.closest('.settings-panel');
+    if (!inSettings) startDownload();
+  }
   if (e.key === 'Escape') closeSettings();
 });
 
