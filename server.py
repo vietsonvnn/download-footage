@@ -1178,17 +1178,20 @@ def _extract_envato_download(session, page_url):
     return title, download_url
 
 def _extract_storyblocks_download(session, page_url):
-    """Extract video download URL and title from Storyblocks page."""
+    """Extract watermark-free download URL and title from Storyblocks page.
+    Requires an authenticated session (subscriber cookies).
+    Priority: download API (watermark-free) > page HTML fallback.
+    """
     resp = session.get(page_url, timeout=30)
     resp.raise_for_status()
     html = resp.text
 
-    # Extract title - multiple strategies
+    # ── Extract title ──────────────────────────────────────────
     title = None
     m = re.search(r'<title[^>]*>([^<]+)</title>', html)
     if m:
         t = m.group(1).strip()
-        t = re.sub(r'\s*[|–—]\s*Storyblocks.*$', '', t).strip()
+        t = re.sub(r'\s*[|–—-]\s*Storyblocks.*$', '', t).strip()
         if t and len(t) > 3:
             title = t
     if not title:
@@ -1198,7 +1201,21 @@ def _extract_storyblocks_download(session, page_url):
     if not title:
         m = re.search(r'<meta[^>]*property="og:title"[^>]*content="([^"]+)"', html)
         if m:
-            title = re.sub(r'\s*[|–—]\s*Storyblocks.*$', '', m.group(1)).strip()
+            title = re.sub(r'\s*[|–—-]\s*Storyblocks.*$', '', m.group(1)).strip()
+
+    # ── Parse __NEXT_DATA__ to get stock item info ─────────────
+    stock_item = {}
+    next_data_match = re.search(r'<script[^>]*id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.S)
+    if next_data_match:
+        try:
+            data = json.loads(next_data_match.group(1))
+            props = data.get("props", {}).get("pageProps", {})
+            stock_item = props.get("stockItem") or props.get("item") or props.get("contentItem") or {}
+            if not title or title == "Storyblocks Video":
+                title = stock_item.get("title") or stock_item.get("name") or title
+        except (json.JSONDecodeError, AttributeError):
+            pass
+
     if not title:
         m = re.search(r'"title"\s*:\s*"([^"]{4,})"', html)
         if m:
@@ -1208,71 +1225,156 @@ def _extract_storyblocks_download(session, page_url):
 
     download_url = None
 
-    # Method 1: Look for download button data / stock item download URL
-    download_patterns = [
-        r'"downloadUrl"\s*:\s*"([^"]+)"',
-        r'"download_url"\s*:\s*"([^"]+)"',
-        r'"contentUrl"\s*:\s*"([^"]+)"',
-        r'"url"\s*:\s*"(https?://[^"]*\.mp4[^"]*)"',
-        r'href="([^"]*download[^"]*)"',
-        r'"mp4"\s*:\s*\{[^}]*"url"\s*:\s*"([^"]+)"',
-        r'"hd"\s*:\s*\{[^}]*"url"\s*:\s*"([^"]+)"',
-    ]
-    for pattern in download_patterns:
-        m = re.search(pattern, html)
+    # ── Extract stock item ID (needed for download API) ────────
+    stock_id = (stock_item.get("id") or stock_item.get("stockItemId")
+                or stock_item.get("contentId") or stock_item.get("mediaId"))
+    # Also try extracting from URL slug (last segment after last hyphen)
+    if not stock_id:
+        m = re.search(r'/(?:video|stock-video)/[^/]+-([a-zA-Z0-9_-]+)(?:\?|$)', page_url)
+        if m:
+            stock_id = m.group(1)
+    # Try numeric ID from URL path
+    if not stock_id:
+        m = re.search(r'/(?:video|stock-video)/(\d+)', page_url)
+        if m:
+            stock_id = m.group(1)
+
+    # ── Extract CSRF / auth tokens from page ───────────────────
+    csrf_token = None
+    m = re.search(r'"csrfToken"\s*:\s*"([^"]+)"', html)
+    if m:
+        csrf_token = m.group(1)
+    if not csrf_token:
+        m = re.search(r'<meta[^>]*name="csrf-token"[^>]*content="([^"]+)"', html)
+        if m:
+            csrf_token = m.group(1)
+    if not csrf_token:
+        m = re.search(r'name="_token"[^>]*value="([^"]+)"', html)
+        if m:
+            csrf_token = m.group(1)
+
+    # ── Method 1: Storyblocks download API (watermark-free) ────
+    if stock_id:
+        api_headers = {
+            "Referer": page_url,
+            "Origin": "https://www.storyblocks.com",
+            "X-Requested-With": "XMLHttpRequest",
+            "Accept": "application/json",
+        }
+        if csrf_token:
+            api_headers["X-CSRF-Token"] = csrf_token
+            api_headers["X-XSRF-TOKEN"] = csrf_token
+
+        # Try multiple known API endpoint patterns
+        api_endpoints = [
+            # Pattern 1: REST-style download endpoint
+            ("POST", f"https://www.storyblocks.com/api/v2/stock-items/{stock_id}/download",
+             {"format": "mp4", "quality": "hd"}),
+            # Pattern 2: media download
+            ("POST", "https://www.storyblocks.com/api/media/download",
+             {"mediaId": stock_id, "mediaType": "video", "format": "original"}),
+            ("POST", "https://www.storyblocks.com/api/media/download",
+             {"mediaId": stock_id, "mediaType": "video"}),
+            # Pattern 3: content download
+            ("POST", f"https://www.storyblocks.com/api/v2/content/{stock_id}/download",
+             {"format": "mp4"}),
+            # Pattern 4: stock item download with different ID formats
+            ("POST", "https://www.storyblocks.com/api/v2/stock-items/download",
+             {"stockItemId": stock_id, "format": "mp4"}),
+            # Pattern 5: GET-style download
+            ("GET", f"https://www.storyblocks.com/api/v2/stock-items/{stock_id}/download?format=mp4", None),
+        ]
+
+        for method, api_url, payload in api_endpoints:
+            try:
+                if method == "POST":
+                    api_resp = session.post(api_url, json=payload, headers=api_headers, timeout=15)
+                else:
+                    api_resp = session.get(api_url, headers=api_headers, timeout=15)
+
+                if api_resp.status_code == 200:
+                    content_type = api_resp.headers.get("Content-Type", "")
+                    # If response is a redirect or direct file download
+                    if "application/json" in content_type:
+                        api_data = api_resp.json()
+                        dl = (api_data.get("downloadUrl") or api_data.get("download_url")
+                              or api_data.get("url") or api_data.get("href")
+                              or api_data.get("data", {}).get("downloadUrl")
+                              or api_data.get("data", {}).get("url"))
+                        if dl and dl.startswith("http"):
+                            download_url = dl
+                            break
+                    elif "video/" in content_type or "application/octet" in content_type:
+                        # Direct file download — use the API URL itself
+                        download_url = api_url
+                        break
+            except Exception:
+                continue
+
+    # ── Method 2: Look for explicit download URLs in HTML ──────
+    if not download_url:
+        # Only match patterns that indicate actual download links, not previews
+        download_patterns = [
+            r'"downloadUrl"\s*:\s*"([^"]+)"',
+            r'"download_url"\s*:\s*"([^"]+)"',
+            r'data-download-url="([^"]+)"',
+            r'href="(/api/[^"]*download[^"]*)"',
+        ]
+        for pattern in download_patterns:
+            m = re.search(pattern, html)
+            if m:
+                url_candidate = m.group(1).replace('\\u002F', '/').replace('\\/', '/')
+                if not url_candidate.startswith('http'):
+                    url_candidate = f"https://www.storyblocks.com{url_candidate}"
+                download_url = url_candidate
+                break
+
+    # ── Method 3: __NEXT_DATA__ — try download formats, avoid preview ──
+    if not download_url and stock_item:
+        # Check for download-specific URLs (not preview)
+        download_formats = stock_item.get("downloadFormats") or stock_item.get("download_formats") or {}
+        if isinstance(download_formats, dict):
+            for key in ("original", "hd", "4k", "mp4", "sd"):
+                fmt = download_formats.get(key)
+                if isinstance(fmt, dict):
+                    dl = fmt.get("url") or fmt.get("downloadUrl")
+                    if dl and dl.startswith("http"):
+                        download_url = dl
+                        break
+                elif isinstance(fmt, str) and fmt.startswith("http"):
+                    download_url = fmt
+                    break
+        if isinstance(download_formats, list):
+            for fmt in download_formats:
+                if isinstance(fmt, dict):
+                    dl = fmt.get("url") or fmt.get("downloadUrl")
+                    if dl and dl.startswith("http"):
+                        download_url = dl
+                        break
+
+    # ── Method 4: contentUrl (usually watermark-free for subscribers) ──
+    if not download_url:
+        m = re.search(r'"contentUrl"\s*:\s*"([^"]+)"', html)
         if m:
             url_candidate = m.group(1).replace('\\u002F', '/').replace('\\/', '/')
             if url_candidate.startswith('http'):
                 download_url = url_candidate
-                break
 
-    # Method 2: Look for __NEXT_DATA__ or similar JS data
-    if not download_url:
-        m = re.search(r'<script[^>]*id="__NEXT_DATA__"[^>]*>(.*?)</script>', html, re.S)
-        if m:
-            try:
-                data = json.loads(m.group(1))
-                # Navigate through Next.js page props
-                props = data.get("props", {}).get("pageProps", {})
-                stock_item = props.get("stockItem") or props.get("item") or {}
-                # Try preview URLs
-                preview = stock_item.get("previewUrls") or stock_item.get("preview_urls") or {}
-                download_url = preview.get("mp4") or preview.get("hd") or preview.get("sd")
-                if not download_url and isinstance(preview, dict):
-                    for v in preview.values():
-                        if isinstance(v, str) and v.startswith("http"):
-                            download_url = v
-                            break
-                if not title or title == "Storyblocks Video":
-                    title = stock_item.get("title") or stock_item.get("name") or title
-            except (json.JSONDecodeError, AttributeError):
-                pass
+    # ── Method 5 (fallback): preview URLs — may have watermark ──
+    if not download_url and stock_item:
+        preview = stock_item.get("previewUrls") or stock_item.get("preview_urls") or {}
+        download_url = preview.get("mp4") or preview.get("hd") or preview.get("sd")
+        if not download_url and isinstance(preview, dict):
+            for v in preview.values():
+                if isinstance(v, str) and v.startswith("http"):
+                    download_url = v
+                    break
 
-    # Method 3: Look for video source tags
+    # ── Method 6 (last resort): video source tags ──────────────
     if not download_url:
         m = re.search(r'<source[^>]+src="([^"]+\.mp4[^"]*)"', html)
         if m:
             download_url = m.group(1)
-
-    # Method 4: Try Storyblocks API endpoint for stock item
-    if not download_url:
-        # Extract stock item ID from URL
-        m = re.search(r'/video/[^/]+-([a-zA-Z0-9_-]+)$', page_url)
-        if not m:
-            m = re.search(r'/stock-video/[^/]+-([a-zA-Z0-9_-]+)', page_url)
-        if m:
-            stock_id = m.group(1)
-            try:
-                api_resp = session.post(
-                    "https://www.storyblocks.com/api/media/download",
-                    json={"mediaId": stock_id, "mediaType": "video"},
-                    timeout=15,
-                )
-                if api_resp.status_code == 200:
-                    api_data = api_resp.json()
-                    download_url = api_data.get("downloadUrl") or api_data.get("url")
-            except Exception:
-                pass
 
     return title, download_url
 
@@ -1356,10 +1458,15 @@ def premium_download_worker(task_id, url, cfg):
             if task_id in downloads:
                 downloads[task_id]["filename"] = filename
 
-        # DVIDSHUB needs Referer from dvidshub.net for download to work
+        # Set proper Referer and headers for each site
         referer = url
         extra_headers = None
-        if site_type == "dvidshub":
+        if site_type == "storyblocks":
+            extra_headers = {
+                "Referer": page_url if 'page_url' in dir() else url,
+                "Origin": "https://www.storyblocks.com",
+            }
+        elif site_type == "dvidshub":
             video_id_m = re.search(r'/video/(\d+)', url)
             referer = f"https://www.dvidshub.net/download/popup/{video_id_m.group(1)}" if video_id_m else url
             extra_headers = {
@@ -1429,9 +1536,19 @@ def build_ytdlp_cmd(url, cfg, seq=None):
     if fmt == "mp3":
         cmd += ["-x", "--audio-format", "mp3", "--audio-quality", "0"]
     else:
-        # Fallback chain: quality merge → any merge → single stream at quality → any single stream
-        cmd += ["-f", f"bv[height<={quality}]+ba/bv+ba/b[height<={quality}]/b",
-                "--merge-output-format", fmt]
+        # Prefer H.264 (avc1) video + AAC audio for max compatibility with editors
+        # (Premiere Pro, CapCut, DaVinci Resolve, etc.)
+        # Fallback: any codec, then re-encode via --postprocessor-args
+        cmd += [
+            "-f", (
+                f"bv[height<={quality}][vcodec~='^(avc|h264)']+ba[acodec~='^(mp4a|aac)']/"
+                f"bv[height<={quality}][vcodec~='^(avc|h264)']+ba/"
+                f"bv[height<={quality}]+ba/bv+ba/"
+                f"b[height<={quality}]/b"
+            ),
+            "--merge-output-format", "mp4",
+            "--postprocessor-args", "ffmpeg:-c:v libx264 -preset medium -crf 18 -c:a aac -b:a 192k -movflags +faststart -pix_fmt yuv420p",
+        ]
     cmd.append(url)
     return cmd
 
