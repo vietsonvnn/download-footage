@@ -27,21 +27,34 @@ except ImportError:
     browser_cookie3 = None
 
 # ─── Ensure ffmpeg & deno are discoverable (winget installs outside default PATH) ───
+FFMPEG_LOCATION = None  # Set if ffmpeg found outside default PATH
+DENO_PATH = None  # Set if deno found outside default PATH
+
 def _ensure_winget_tools_in_path():
+    global FFMPEG_LOCATION, DENO_PATH
     if platform.system() != "Windows":
         return
     import glob
     local = os.environ.get("LOCALAPPDATA", "")
     if not local:
         return
+    # Add WinGet Links directory to PATH (contains shims for all winget-installed tools)
+    links_dir = os.path.join(local, "Microsoft", "WinGet", "Links")
+    if os.path.isdir(links_dir) and links_dir not in os.environ.get("PATH", ""):
+        os.environ["PATH"] = links_dir + os.pathsep + os.environ.get("PATH", "")
     for tool in ("ffmpeg.exe", "deno.exe"):
         try:
-            subprocess.run([tool.replace(".exe", ""), "--version"], capture_output=True, timeout=3)
+            subprocess.run([tool.replace(".exe", ""), "--version"], capture_output=True, timeout=5)
             continue  # already in PATH
-        except (FileNotFoundError, subprocess.TimeoutExpired):
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
             pass
         for exe in glob.glob(os.path.join(local, "Microsoft", "WinGet", "Packages", "**", tool), recursive=True):
-            os.environ["PATH"] = os.path.dirname(exe) + os.pathsep + os.environ.get("PATH", "")
+            tool_dir = os.path.dirname(exe)
+            os.environ["PATH"] = tool_dir + os.pathsep + os.environ.get("PATH", "")
+            if tool == "ffmpeg.exe":
+                FFMPEG_LOCATION = tool_dir
+            elif tool == "deno.exe":
+                DENO_PATH = exe
             break
 
 _ensure_winget_tools_in_path()
@@ -1386,6 +1399,15 @@ def _get_ytdlp_cookie_args():
         return ["--cookies", str(cookie_file)]
     return []
 
+def _get_ytdlp_tool_args():
+    """Return extra args for ffmpeg location and deno JS runtime if detected."""
+    args = []
+    if FFMPEG_LOCATION:
+        args += ["--ffmpeg-location", FFMPEG_LOCATION]
+    if DENO_PATH:
+        args += ["--js-runtimes", f"deno:{DENO_PATH}"]
+    return args
+
 def build_ytdlp_cmd(url, cfg, seq=None):
     dl_dir = cfg.get("download_dir", DEFAULT_CONFIG["download_dir"])
     quality = cfg.get("quality", "1080")
@@ -1401,6 +1423,7 @@ def build_ytdlp_cmd(url, cfg, seq=None):
         "--newline", "--no-colors",
         "--progress-template", "%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s",
         *_get_ytdlp_cookie_args(),
+        *_get_ytdlp_tool_args(),
         "--remote-components", "ejs:github",
     ]
     if fmt == "mp3":
@@ -1416,7 +1439,7 @@ def get_video_title(url):
     try:
         result = subprocess.run(
             [sys.executable, "-m", "yt_dlp", "--get-title", "--no-playlist",
-             *_get_ytdlp_cookie_args(), "--remote-components", "ejs:github", url],
+             *_get_ytdlp_cookie_args(), *_get_ytdlp_tool_args(), "--remote-components", "ejs:github", url],
             capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=30)
         title = result.stdout.strip()
         if title and title != "NA":
